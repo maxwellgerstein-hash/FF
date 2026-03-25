@@ -171,7 +171,7 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         measures_by_ccn = _build_measures_lookup(db)
         emit(f"Measures available for {len(measures_by_ccn)} hospices", 0.65, "detect")
 
-        emit("Running fraud signal detection (7 signal types)...", 0.68, "detect")
+        emit("Running fraud signal detection (11 signal types)...", 0.68, "detect")
 
         entities = db.query(Entity).all()
         total_signals = 0

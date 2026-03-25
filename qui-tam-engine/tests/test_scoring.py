@@ -64,4 +64,6 @@ def test_claim_count_estimation():
     signals[0].evidence["alos_days"] = 180
 
     count = estimate_claim_count_hospice(entity, signals)
-    assert count == 100 * 180  # patients * LOS
+    # For non-terminal enrollment: excess days = ALOS - national mean (92)
+    # 100 patients × (180 - 92) = 8,800 excess days
+    assert count == 100 * (180 - 92)

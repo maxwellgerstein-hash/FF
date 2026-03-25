@@ -27,7 +27,35 @@ PRIORITY_GOVT_LOSS = 1_000_000  # $1M+ = priority tier
 
 # ── Hospice estimation constants ──
 AVG_HOSPICE_DAILY_RATE = 195.00  # Routine home care per diem (most common level)
-NATIONAL_MEDIAN_LOS = 18         # days
+NATIONAL_MEAN_LOS = 92           # days (mean, skewed by long-stay outliers)
+NATIONAL_MEDIAN_LOS = 18         # days (median)
+
+# ── OIG-aligned hospice fraud detection thresholds ──
+# Source: OIG reports OEI-02-16-00570, DOJ settlements, CMS hospice data
+HOSPICE_THRESHOLDS = {
+    # Average length of stay (mean ALOS in days)
+    "alos_medium": 60,       # Above national mean — warrants review
+    "alos_high": 100,        # Well above mean — strong anomaly
+    "alos_critical": 180,    # OIG investigation trigger
+    # Live discharge rate (%)
+    "live_discharge_flag": 40,    # OIG flags at ~2x national avg (17-19%)
+    "live_discharge_extreme": 60, # Confirmed fraud cases show 60-80%
+    # Mortality rate (%) — inverse of live discharge
+    "mortality_low": 60,          # Legitimate hospices: 75-85%
+    "mortality_critical": 40,     # Strong indicator of non-terminal enrollment
+    # Cancer diagnosis rate (%)
+    "cancer_pct_low": 10,         # Fraudulent hospices often <10%
+    "cancer_pct_normal_low": 20,  # National norm ~25-30%
+    # New entity velocity
+    "new_entity_months": 24,      # Flag if < 24 months old (was 12)
+    "new_entity_min_episodes": 50, # With > 50 episodes (was 100)
+    # Address clustering
+    "address_cluster_min": 2,     # 2+ other entities at same address (3+ total)
+    # Revenue per beneficiary approaching Medicare cap
+    "revenue_per_beneficiary_flag": 28_000,  # Medicare cap ~$32-34K
+    # Same owner threshold
+    "same_owner_min_entities": 2, # Flag if owner controls 2+ hospices
+}
 
 # ── Known fraud hotspot MSAs ──
 FRAUD_HOTSPOT_MSAS = {

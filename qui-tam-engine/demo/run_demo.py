@@ -44,7 +44,7 @@ SAMPLE_HOSPICES = [
         "patients": 380,
         "auth_first": "MARIANA",
         "auth_last": "HERNANDEZ",
-        "measures": {"alos": 187, "live_discharge": 78, "start_date": "01/01/2024", "end_date": "12/31/2024"},
+        "measures": {"alos": 187, "live_discharge": 78, "cancer_pct": 6, "start_date": "01/01/2024", "end_date": "12/31/2024"},
     },
     {
         "name": "Golden State Palliative Services Inc",
@@ -59,7 +59,7 @@ SAMPLE_HOSPICES = [
         "patients": 290,
         "auth_first": "MARIANA",  # Same owner as above
         "auth_last": "HERNANDEZ",
-        "measures": {"alos": 210, "live_discharge": 82, "start_date": "01/01/2024", "end_date": "12/31/2024"},
+        "measures": {"alos": 210, "live_discharge": 82, "cancer_pct": 4, "start_date": "01/01/2024", "end_date": "12/31/2024"},
     },
     {
         "name": "Pacific Hospice Group",
@@ -74,7 +74,7 @@ SAMPLE_HOSPICES = [
         "patients": 250,
         "auth_first": "CARLOS",
         "auth_last": "HERNANDEZ",
-        "measures": {"alos": 165, "live_discharge": 72, "start_date": "01/01/2024", "end_date": "12/31/2024"},
+        "measures": {"alos": 165, "live_discharge": 72, "cancer_pct": 8, "start_date": "01/01/2024", "end_date": "12/31/2024"},
     },
     {
         "name": "Eternal Peace Hospice",
@@ -89,7 +89,7 @@ SAMPLE_HOSPICES = [
         "patients": 160,
         "auth_first": "DMITRI",
         "auth_last": "VOLKOV",
-        "measures": {"alos": 220, "live_discharge": 85, "start_date": "01/01/2024", "end_date": "12/31/2024"},
+        "measures": {"alos": 220, "live_discharge": 85, "cancer_pct": 3, "start_date": "01/01/2024", "end_date": "12/31/2024"},
     },
     {
         "name": "Compassionate Journey Home Health & Hospice",
@@ -104,7 +104,7 @@ SAMPLE_HOSPICES = [
         "patients": 750,
         "auth_first": "ROBERT",
         "auth_last": "JOHNSON",
-        "measures": {"alos": 195, "live_discharge": 76, "start_date": "01/01/2024", "end_date": "12/31/2024"},
+        "measures": {"alos": 195, "live_discharge": 76, "cancer_pct": 7, "start_date": "01/01/2024", "end_date": "12/31/2024"},
     },
     {
         "name": "Serenity Now Hospice Care",
@@ -119,7 +119,7 @@ SAMPLE_HOSPICES = [
         "patients": 88,
         "auth_first": "JAMES",
         "auth_last": "SMITH",
-        "measures": {"alos": 155, "live_discharge": 68, "start_date": "01/01/2024", "end_date": "12/31/2024"},
+        "measures": {"alos": 155, "live_discharge": 68, "cancer_pct": 12, "start_date": "01/01/2024", "end_date": "12/31/2024"},
     },
     {
         "name": "Harbor Light End of Life Services",
@@ -134,7 +134,7 @@ SAMPLE_HOSPICES = [
         "patients": 1050,
         "auth_first": "LINDA",
         "auth_last": "CHEN",
-        "measures": {"alos": 45, "live_discharge": 25, "start_date": "01/01/2024", "end_date": "12/31/2024"},
+        "measures": {"alos": 45, "live_discharge": 25, "cancer_pct": 28, "start_date": "01/01/2024", "end_date": "12/31/2024"},
     },
 ]
 
