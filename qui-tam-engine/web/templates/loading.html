@@ -2,60 +2,233 @@
 {% block title %}Analysis in Progress &mdash; Qui Tam Case Engine{% endblock %}
 
 {% block content %}
-<div id="loading-screen" class="max-w-2xl mx-auto mt-12 p-8">
-    <h2 class="text-2xl font-bold mb-6">Building Case Docket &mdash; Full Analysis in Progress</h2>
+<div id="loading-screen" class="max-w-3xl mx-auto mt-8 p-8">
+    <h2 class="text-2xl font-bold mb-2">Building Case Docket</h2>
+    <p class="text-gray-500 text-sm mb-6">
+        Cross-referencing CMS, OIG, and NPPES data across thousands of providers to identify
+        False Claims Act violations in healthcare, government contracts, and financial fraud.
+    </p>
 
-    <div class="mb-4">
+    <!-- Progress Bar -->
+    <div class="mb-2">
         <div class="w-full bg-gray-200 rounded-full h-4">
             <div id="progress-bar"
                  class="bg-blue-600 h-4 rounded-full transition-all duration-500"
                  style="width: 0%"></div>
         </div>
     </div>
-
-    <p id="progress-message" class="text-gray-700 mb-4">Initializing...</p>
-
-    <div id="progress-log"
-         class="bg-gray-50 rounded p-4 text-sm font-mono max-h-64 overflow-y-auto border">
+    <div class="flex justify-between text-xs text-gray-500 mb-6">
+        <span id="progress-pct">0%</span>
+        <span id="time-display">Elapsed: 0:00 &mdash; Estimating time remaining...</span>
     </div>
 
-    <p class="text-xs text-gray-400 mt-4">
-        Initial analysis takes 5-15 minutes. The system is downloading and cross-referencing
-        data from CMS, OIG, and NPPES across thousands of hospice providers.
-    </p>
+    <!-- Current Action -->
+    <div id="current-action" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div class="flex items-center gap-3">
+            <div class="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+            <div>
+                <div id="current-step-name" class="font-bold text-blue-900">Initializing...</div>
+                <div id="current-step-detail" class="text-sm text-blue-700"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pipeline Steps -->
+    <div class="bg-white rounded-lg shadow p-5 mb-6">
+        <h3 class="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Pipeline Steps</h3>
+        <div class="space-y-3" id="steps-list">
+            <div class="step flex items-center gap-3 text-sm" data-step="0">
+                <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">1</div>
+                <div class="flex-1">
+                    <div class="step-name text-gray-600">Preparing workspace</div>
+                </div>
+                <div class="step-status text-xs text-gray-400">pending</div>
+            </div>
+            <div class="step flex items-center gap-3 text-sm" data-step="1">
+                <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">2</div>
+                <div class="flex-1">
+                    <div class="step-name text-gray-600">Downloading CMS Hospice Compare data</div>
+                    <div class="text-xs text-gray-400">~5,000 hospice agencies + quality measures</div>
+                </div>
+                <div class="step-status text-xs text-gray-400">pending</div>
+            </div>
+            <div class="step flex items-center gap-3 text-sm" data-step="2">
+                <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">3</div>
+                <div class="flex-1">
+                    <div class="step-name text-gray-600">Downloading OIG LEIE exclusion list</div>
+                    <div class="text-xs text-gray-400">~82,000 excluded individuals &amp; entities</div>
+                </div>
+                <div class="step-status text-xs text-gray-400">pending</div>
+            </div>
+            <div class="step flex items-center gap-3 text-sm" data-step="3">
+                <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">4</div>
+                <div class="flex-1">
+                    <div class="step-name text-gray-600">Downloading &amp; scanning NPPES bulk file</div>
+                    <div class="text-xs text-gray-400">~8 million NPI records (~1 GB download), filtering hospice providers</div>
+                </div>
+                <div class="step-status text-xs text-gray-400">pending</div>
+            </div>
+            <div class="step flex items-center gap-3 text-sm" data-step="4">
+                <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">5</div>
+                <div class="flex-1">
+                    <div class="step-name text-gray-600">Resolving entities across data sources</div>
+                    <div class="text-xs text-gray-400">Fuzzy name matching, NPI/CCN cross-reference</div>
+                </div>
+                <div class="step-status text-xs text-gray-400">pending</div>
+            </div>
+            <div class="step flex items-center gap-3 text-sm" data-step="5">
+                <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">6</div>
+                <div class="flex-1">
+                    <div class="step-name text-gray-600">Running fraud signal detection</div>
+                    <div class="text-xs text-gray-400">Ghost facilities, abnormal LOS, excluded officials, address clustering, and more</div>
+                </div>
+                <div class="step-status text-xs text-gray-400">pending</div>
+            </div>
+            <div class="step flex items-center gap-3 text-sm" data-step="6">
+                <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">7</div>
+                <div class="flex-1">
+                    <div class="step-name text-gray-600">Scoring case leads &amp; estimating recoveries</div>
+                    <div class="text-xs text-gray-400">Litigation value, government loss, treble damages, relator share</div>
+                </div>
+                <div class="step-status text-xs text-gray-400">pending</div>
+            </div>
+            <div class="step flex items-center gap-3 text-sm" data-step="7">
+                <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">8</div>
+                <div class="flex-1">
+                    <div class="step-name text-gray-600">Clustering related case leads</div>
+                    <div class="text-xs text-gray-400">Grouping shared-address and shared-owner entities into unified cases</div>
+                </div>
+                <div class="step-status text-xs text-gray-400">pending</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Log -->
+    <details class="mb-6">
+        <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600">Show detailed log</summary>
+        <div id="progress-log"
+             class="bg-gray-50 rounded p-4 text-xs font-mono max-h-48 overflow-y-auto border mt-2">
+        </div>
+    </details>
 </div>
 
 <script>
 const evtSource = new EventSource("/progress");
 const bar = document.getElementById("progress-bar");
-const msg = document.getElementById("progress-message");
+const pctLabel = document.getElementById("progress-pct");
+const timeDisplay = document.getElementById("time-display");
+const stepName = document.getElementById("current-step-name");
+const stepDetail = document.getElementById("current-step-detail");
+const actionBox = document.getElementById("current-action");
 const log = document.getElementById("progress-log");
+const steps = document.querySelectorAll(".step");
+
+let lastStepIndex = -1;
+
+function formatTime(seconds) {
+    if (seconds <= 0) return "0:00";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return m + ":" + String(s).padStart(2, "0");
+}
 
 evtSource.onmessage = function(event) {
     const data = JSON.parse(event.data);
 
+    // Update progress bar
     if (data.percent !== null && data.percent >= 0) {
-        bar.style.width = (data.percent * 100) + "%";
+        const pct = Math.round(data.percent * 100);
+        bar.style.width = pct + "%";
+        pctLabel.textContent = pct + "%";
     }
 
-    msg.textContent = data.message;
+    // Update current action
+    stepName.textContent = data.step || data.message;
+    stepDetail.textContent = data.message;
 
+    // Update timing
+    if (data.elapsed !== undefined) {
+        let timeStr = "Elapsed: " + formatTime(data.elapsed);
+        if (data.eta !== undefined && data.eta > 0 && data.percent < 1.0) {
+            timeStr += " \u2014 Est. " + formatTime(data.eta) + " remaining";
+        }
+        timeDisplay.textContent = timeStr;
+    }
+
+    // Update step indicators
+    if (data.step_index !== undefined && data.step_index !== lastStepIndex) {
+        // Mark previous steps as complete
+        steps.forEach((el, i) => {
+            const icon = el.querySelector(".step-icon");
+            const name = el.querySelector(".step-name");
+            const status = el.querySelector(".step-status");
+
+            if (i < data.step_index) {
+                // Completed
+                icon.className = "step-icon w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-xs font-bold text-white";
+                icon.innerHTML = "\u2713";
+                name.className = "step-name text-gray-500 line-through";
+                status.textContent = "done";
+                status.className = "step-status text-xs text-green-600 font-bold";
+            } else if (i === data.step_index) {
+                // Active
+                icon.className = "step-icon w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white animate-pulse";
+                name.className = "step-name text-gray-900 font-bold";
+                status.textContent = "running...";
+                status.className = "step-status text-xs text-blue-600 font-bold";
+            } else {
+                // Pending
+                icon.className = "step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500";
+                name.className = "step-name text-gray-600";
+                status.textContent = "pending";
+                status.className = "step-status text-xs text-gray-400";
+            }
+        });
+        lastStepIndex = data.step_index;
+    }
+
+    // Add to log
     const line = document.createElement("div");
     line.textContent = new Date().toLocaleTimeString() + " -- " + data.message;
     log.appendChild(line);
     log.scrollTop = log.scrollHeight;
 
+    // Complete
     if (data.percent === 1.0) {
         evtSource.close();
-        msg.textContent = "Analysis complete! Reloading...";
-        setTimeout(() => window.location.href = "/", 1500);
+
+        // Mark all steps as complete
+        steps.forEach((el) => {
+            const icon = el.querySelector(".step-icon");
+            const name = el.querySelector(".step-name");
+            const status = el.querySelector(".step-status");
+            icon.className = "step-icon w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-xs font-bold text-white";
+            icon.innerHTML = "\u2713";
+            name.className = "step-name text-gray-500 line-through";
+            status.textContent = "done";
+            status.className = "step-status text-xs text-green-600 font-bold";
+        });
+
+        actionBox.className = "bg-green-50 border border-green-200 rounded-lg p-4 mb-6";
+        actionBox.innerHTML = '<div class="flex items-center gap-3">'
+            + '<div class="h-5 w-5 text-green-600 font-bold text-lg">\u2713</div>'
+            + '<div><div class="font-bold text-green-900">Analysis complete!</div>'
+            + '<div class="text-sm text-green-700">Redirecting to case docket...</div></div></div>';
+        bar.className = "bg-green-500 h-4 rounded-full transition-all duration-500";
+        timeDisplay.textContent = "Total time: " + formatTime(data.elapsed);
+        setTimeout(() => window.location.href = "/", 2000);
     }
 
+    // Error
     if (data.percent === -1) {
         evtSource.close();
+        actionBox.className = "bg-red-50 border border-red-200 rounded-lg p-4 mb-6";
+        actionBox.innerHTML = '<div class="flex items-center gap-3">'
+            + '<div class="h-5 w-5 text-red-600 font-bold text-lg">\u2717</div>'
+            + '<div><div class="font-bold text-red-900">Analysis failed</div>'
+            + '<div class="text-sm text-red-700">' + data.message + '</div></div></div>';
         bar.classList.remove("bg-blue-600");
         bar.classList.add("bg-red-600");
-        msg.textContent = "Error: " + data.message;
     }
 };
 </script>

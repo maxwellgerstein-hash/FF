@@ -11,6 +11,7 @@ Executes:
 
 import asyncio
 import json
+import time
 from datetime import datetime, date
 
 from db.database import SessionLocal, init_db
@@ -28,18 +29,64 @@ from scoring.legal_risk import assess_public_disclosure_risk, assess_rule_9b, ca
 from clustering.case_clusterer import cluster_case_leads
 from config import EXPECTED_MEASURE_CODES
 
+# Pipeline steps with display names and estimated durations (seconds)
+PIPELINE_STEPS = [
+    {"id": "prepare", "name": "Preparing workspace", "est_seconds": 5},
+    {"id": "ingest_cms", "name": "Downloading CMS Hospice Compare data", "est_seconds": 30},
+    {"id": "ingest_leie", "name": "Downloading OIG LEIE exclusion list", "est_seconds": 20},
+    {"id": "ingest_nppes", "name": "Downloading & scanning NPPES bulk file (~1 GB)", "est_seconds": 300},
+    {"id": "resolve", "name": "Resolving entities across data sources", "est_seconds": 30},
+    {"id": "detect", "name": "Running fraud signal detection", "est_seconds": 60},
+    {"id": "score", "name": "Scoring case leads & estimating recoveries", "est_seconds": 20},
+    {"id": "cluster", "name": "Clustering related case leads", "est_seconds": 10},
+]
+
 
 async def run_pipeline(progress_queue: asyncio.Queue | None = None):
     """
-    Execute the full Phase 1 pipeline.
+    Execute the full analysis pipeline.
 
     Args:
-        progress_queue: If provided, put {message, percent} dicts for SSE streaming.
+        progress_queue: If provided, put {message, percent, step, step_index,
+                        total_steps, elapsed, eta} dicts for SSE streaming.
     """
+    pipeline_start = time.monotonic()
+    current_step_index = 0
 
-    def emit(msg: str, pct: float):
+    def emit(msg: str, pct: float, step_id: str | None = None):
+        nonlocal current_step_index
+        elapsed = time.monotonic() - pipeline_start
+
+        # Update step index
+        if step_id:
+            for i, s in enumerate(PIPELINE_STEPS):
+                if s["id"] == step_id:
+                    current_step_index = i
+                    break
+
+        # Estimate remaining time based on step estimates
+        remaining_est = sum(
+            s["est_seconds"] for s in PIPELINE_STEPS[current_step_index:]
+        )
+        # Adjust estimate based on actual pace vs expected pace
+        expected_elapsed = sum(
+            s["est_seconds"] for s in PIPELINE_STEPS[:current_step_index]
+        )
+        if expected_elapsed > 0 and elapsed > 0:
+            pace_ratio = elapsed / expected_elapsed
+            remaining_est = remaining_est * pace_ratio
+
+        event = {
+            "message": msg,
+            "percent": pct,
+            "step": PIPELINE_STEPS[current_step_index]["name"] if current_step_index < len(PIPELINE_STEPS) else "Finishing",
+            "step_index": current_step_index,
+            "total_steps": len(PIPELINE_STEPS),
+            "elapsed": round(elapsed),
+            "eta": max(round(remaining_est), 0),
+        }
         if progress_queue:
-            progress_queue.put_nowait({"message": msg, "percent": pct})
+            progress_queue.put_nowait(event)
         print(f"[{pct:.0%}] {msg}")
 
     init_db()
@@ -47,7 +94,7 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
 
     try:
         # Clear stale data from any previous run so results don't accumulate
-        emit("Clearing previous analysis data...", 0.02)
+        emit("Clearing previous analysis data...", 0.02, "prepare")
         db.query(CaseLeadRecord).delete()
         db.query(SignalRecord).delete()
         db.query(Entity).delete()
@@ -58,69 +105,73 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         seed_known_fraud_cases()
 
         # ════════════════════════════════════════
-        # PHASE 1: INGEST
+        # DATA INGESTION
         # ════════════════════════════════════════
 
-        emit("Downloading CMS Hospice Compare data...", 0.05)
+        emit("Downloading CMS Hospice Compare data...", 0.05, "ingest_cms")
         try:
             hospice_stats = await CMSHospiceIngester().ingest(db)
             emit(
                 f"Hospice Compare: {hospice_stats['records_pulled']} agencies, "
                 f"{hospice_stats['measures_pulled']} measure sets loaded",
                 0.10,
+                "ingest_cms",
             )
         except Exception as e:
-            emit(f"WARNING: CMS Hospice Compare failed: {e}", 0.10)
+            emit(f"WARNING: CMS Hospice Compare failed: {e}", 0.10, "ingest_cms")
             hospice_stats = {"records_pulled": 0, "measures_pulled": 0}
 
-        emit("Downloading OIG LEIE exclusion list...", 0.12)
+        emit("Downloading OIG LEIE exclusion list...", 0.12, "ingest_leie")
         try:
             leie_stats = await OIGLEIEIngester().ingest(db)
             emit(
                 f"OIG LEIE: {leie_stats['records_pulled']} exclusions indexed "
                 f"({leie_stats['records_with_npi']} with NPI)",
                 0.20,
+                "ingest_leie",
             )
         except Exception as e:
-            emit(f"WARNING: OIG LEIE failed: {e}", 0.20)
+            emit(f"WARNING: OIG LEIE failed: {e}", 0.20, "ingest_leie")
             leie_stats = {"records_pulled": 0, "records_with_npi": 0}
 
-        emit("Downloading NPPES bulk file (~1 GB, this takes a few minutes)...", 0.22)
+        emit("Downloading NPPES bulk file (~1 GB)...", 0.22, "ingest_nppes")
         try:
             nppes_stats = await NPPESIngester().ingest(
-                db, progress_callback=lambda msg, _: emit(msg, 0.35)
+                db, progress_callback=lambda msg, _: emit(msg, 0.35, "ingest_nppes")
             )
             emit(
                 f"NPPES: {nppes_stats['hospice_rows_found']} hospice providers extracted "
                 f"from {nppes_stats['total_rows_scanned']:,} total records",
                 0.45,
+                "ingest_nppes",
             )
         except Exception as e:
-            emit(f"WARNING: NPPES failed: {e}. Continuing without NPPES enrichment.", 0.45)
+            emit(f"WARNING: NPPES failed: {e}. Continuing without NPPES enrichment.", 0.45, "ingest_nppes")
             nppes_stats = {"hospice_rows_found": 0, "total_rows_scanned": 0}
 
         # ════════════════════════════════════════
-        # PHASE 2: RESOLVE ENTITIES
+        # ENTITY RESOLUTION
         # ════════════════════════════════════════
 
-        emit("Resolving entities across data sources...", 0.50)
+        emit("Resolving entities across data sources...", 0.50, "resolve")
         resolver = EntityResolver()
         resolution_stats = resolver.resolve_hospice_entities(db)
         emit(
             f"Resolved {resolution_stats['entities_created']} entities, "
             f"{resolution_stats['nppes_matched']} NPPES matches",
             0.60,
+            "resolve",
         )
 
         # ════════════════════════════════════════
-        # PHASE 3: DETECT SIGNALS
+        # FRAUD SIGNAL DETECTION
         # ════════════════════════════════════════
 
-        emit("Building hospice quality measures lookup...", 0.62)
+        emit("Building hospice quality measures lookup...", 0.62, "detect")
         measures_by_ccn = _build_measures_lookup(db)
-        emit(f"Measures available for {len(measures_by_ccn)} hospices", 0.65)
+        emit(f"Measures available for {len(measures_by_ccn)} hospices", 0.65, "detect")
 
-        emit("Running hospice fraud detection (7 signal types)...", 0.68)
+        emit("Running fraud signal detection (7 signal types)...", 0.68, "detect")
 
         entities = db.query(Entity).all()
         total_signals = 0
@@ -164,6 +215,7 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
                     f"Scanned {i + 1}/{len(entities)} entities, "
                     f"{total_signals} signals detected...",
                     pct,
+                    "detect",
                 )
 
         db.commit()
@@ -171,13 +223,14 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
             f"Detection complete: {total_signals} signals across "
             f"{entities_with_signals} entities",
             0.85,
+            "detect",
         )
 
         # ════════════════════════════════════════
-        # PHASE 4: SCORE AND GENERATE CASE LEADS
+        # CASE SCORING & RECOVERY ESTIMATION
         # ════════════════════════════════════════
 
-        emit("Scoring case leads and estimating recoveries...", 0.88)
+        emit("Scoring case leads and estimating recoveries...", 0.88, "score")
 
         flagged_entity_ids = [
             eid[0]
@@ -262,15 +315,16 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         db.commit()
 
         # ════════════════════════════════════════
-        # PHASE 5: CLUSTER RELATED LEADS
+        # CLUSTER RELATED LEADS
         # ════════════════════════════════════════
 
-        emit("Clustering related case leads...", 0.93)
+        emit("Clustering related case leads...", 0.93, "cluster")
         cluster_stats = cluster_case_leads(db)
         emit(
             f"Created {cluster_stats['clusters_created']} clusters, "
             f"{cluster_stats['leads_clustered']} leads grouped",
             0.96,
+            "cluster",
         )
 
         emit(
