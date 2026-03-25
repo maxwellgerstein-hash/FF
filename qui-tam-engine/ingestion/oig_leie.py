@@ -104,9 +104,10 @@ class OIGLEIEIngester(BaseIngester):
         if progress_callback:
             progress_callback("Connecting to OIG servers...", None)
 
-        # Stream download so we can report progress
+        # Stream download with tight timeouts — connect must happen fast
         chunks = []
-        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+        timeouts = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
+        async with httpx.AsyncClient(timeout=timeouts, follow_redirects=True) as client:
             async with client.stream("GET", DOWNLOAD_URL) as response:
                 response.raise_for_status()
                 total = int(response.headers.get("content-length", 0))

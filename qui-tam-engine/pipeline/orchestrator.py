@@ -174,13 +174,20 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
             )
 
         emit("Downloading OIG LEIE exclusion list...", 0.12, "ingest_leie")
-        leie_pct = [0.12]
-        def leie_progress(msg, _):
-            leie_pct[0] = min(leie_pct[0] + 0.005, 0.19)
-            emit(msg, leie_pct[0], "ingest_leie")
-        leie_stats = await _timed_ingest(
-            OIGLEIEIngester().ingest(db, progress_callback=leie_progress), "OIG LEIE", timeout=15
-        )
+
+        # Try live download with aggressive timeouts — OIG server is often slow
+        leie_stats = None
+        try:
+            leie_pct = [0.12]
+            def leie_progress(msg, _):
+                leie_pct[0] = min(leie_pct[0] + 0.005, 0.19)
+                emit(msg, leie_pct[0], "ingest_leie")
+            leie_stats = await _timed_ingest(
+                OIGLEIEIngester().ingest(db, progress_callback=leie_progress), "OIG LEIE", timeout=15
+            )
+        except Exception:
+            leie_stats = None
+
         if leie_stats and leie_stats.get("records_pulled", 0) > 0:
             emit(
                 f"OIG LEIE: {leie_stats['records_pulled']} exclusions indexed "
@@ -188,7 +195,7 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
                 0.20, "ingest_leie",
             )
         else:
-            # Fallback: use built-in exclusion database
+            # Fallback: use built-in exclusion database (instant, no network)
             emit("OIG download unavailable — loading built-in exclusion database...", 0.15, "ingest_leie")
             from ingestion.seed_leie import seed_fallback_leie
             leie_stats = seed_fallback_leie(db)
