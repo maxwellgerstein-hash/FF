@@ -164,10 +164,12 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
             )
 
         emit("Downloading OIG LEIE exclusion list...", 0.12, "ingest_leie")
+        emit("Connecting to OIG servers & downloading exclusion CSV...", 0.13, "ingest_leie")
         leie_stats = await _timed_ingest(
             OIGLEIEIngester().ingest(db), "OIG LEIE", timeout=60
         )
         if leie_stats:
+            emit("Parsing exclusion records...", 0.17, "ingest_leie")
             emit(
                 f"OIG LEIE: {leie_stats['records_pulled']} exclusions indexed "
                 f"({leie_stats['records_with_npi']} with NPI)",
@@ -178,9 +180,14 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
             emit("OIG LEIE: skipped", 0.20, "ingest_leie")
 
         emit("Downloading NPPES bulk file (~1 GB)...", 0.22, "ingest_nppes")
+        emit("This is the largest download — may take 1-2 minutes...", 0.23, "ingest_nppes")
+        nppes_pct = [0.23]  # mutable counter for incremental progress
+        def nppes_progress(msg, _):
+            nppes_pct[0] = min(nppes_pct[0] + 0.02, 0.39)
+            emit(msg, nppes_pct[0], "ingest_nppes")
         nppes_stats = await _timed_ingest(
             NPPESIngester().ingest(
-                db, progress_callback=lambda msg, _: emit(msg, 0.35, "ingest_nppes")
+                db, progress_callback=nppes_progress
             ), "NPPES", timeout=120  # 2 min max for the 1GB download
         )
         if nppes_stats:
@@ -274,6 +281,7 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         # ════════════════════════════════════════
 
         emit("Resolving entities across data sources...", 0.52, "resolve")
+        emit("Fuzzy-matching provider names and cross-referencing NPI/CCN...", 0.54, "resolve")
         resolver = EntityResolver()
         resolution_stats = resolver.resolve_hospice_entities(db)
         emit(
@@ -396,8 +404,9 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
                     db.add(sig_record)
                     total_signals += 1
 
-            if (i + 1) % 500 == 0:
-                db.commit()
+            if (i + 1) % 100 == 0:
+                if (i + 1) % 500 == 0:
+                    db.commit()
                 pct = 0.68 + (i / max(len(entities), 1)) * 0.15
                 emit(
                     f"Scanned {i + 1}/{len(entities)} entities, "

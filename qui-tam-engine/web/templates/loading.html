@@ -111,13 +111,19 @@
         </div>
     </div>
 
-    <!-- Live Log -->
-    <details class="mb-6">
-        <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600">Show detailed log</summary>
-        <div id="progress-log"
-             class="bg-gray-50 rounded p-4 text-xs font-mono max-h-48 overflow-y-auto border mt-2">
+    <!-- Live Activity Window (always visible) -->
+    <div class="bg-white rounded-lg shadow p-5 mb-6">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-gray-500 uppercase tracking-wider">Live Activity</h3>
+            <div class="flex items-center gap-2">
+                <span id="heartbeat-dot" class="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span id="heartbeat-text" class="text-xs text-gray-400">Connected</span>
+            </div>
         </div>
-    </details>
+        <div id="progress-log"
+             class="bg-gray-900 rounded p-4 text-xs font-mono max-h-56 overflow-y-auto text-green-400 leading-relaxed">
+        </div>
+    </div>
 </div>
 
 <script>
@@ -132,6 +138,8 @@ const log = document.getElementById("progress-log");
 const steps = document.querySelectorAll(".step");
 
 let lastStepIndex = -1;
+let lastUpdateTime = Date.now();
+let heartbeatInterval;
 
 function formatTime(seconds) {
     if (seconds <= 0) return "0:00";
@@ -140,8 +148,26 @@ function formatTime(seconds) {
     return m + ":" + String(s).padStart(2, "0");
 }
 
+// Heartbeat: show how long since last server message
+const heartbeatDot = document.getElementById("heartbeat-dot");
+const heartbeatText = document.getElementById("heartbeat-text");
+heartbeatInterval = setInterval(() => {
+    const ago = Math.floor((Date.now() - lastUpdateTime) / 1000);
+    if (ago < 3) {
+        heartbeatDot.className = "inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse";
+        heartbeatText.textContent = "Live";
+    } else if (ago < 10) {
+        heartbeatDot.className = "inline-block w-2 h-2 rounded-full bg-yellow-500 animate-pulse";
+        heartbeatText.textContent = "Waiting... (" + ago + "s)";
+    } else {
+        heartbeatDot.className = "inline-block w-2 h-2 rounded-full bg-yellow-500 animate-pulse";
+        heartbeatText.textContent = "Working... (" + ago + "s since last update)";
+    }
+}, 1000);
+
 evtSource.onmessage = function(event) {
     const data = JSON.parse(event.data);
+    lastUpdateTime = Date.now();
 
     // Update progress bar
     if (data.percent !== null && data.percent >= 0) {
@@ -191,15 +217,25 @@ evtSource.onmessage = function(event) {
         lastStepIndex = data.step_index;
     }
 
-    // Add to log
-    const line = document.createElement("div");
-    line.textContent = new Date().toLocaleTimeString() + " -- " + data.message;
-    log.appendChild(line);
-    log.scrollTop = log.scrollHeight;
+    // Add to live activity log
+    if (data.message) {
+        const line = document.createElement("div");
+        const ts = new Date().toLocaleTimeString();
+        if (data.heartbeat) {
+            line.innerHTML = '<span class="text-gray-600">' + ts + '</span> <span class="text-yellow-500">' + data.message + '</span>';
+        } else {
+            line.innerHTML = '<span class="text-gray-500">' + ts + '</span> ' + data.message;
+        }
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+    }
 
     // Complete
     if (data.percent === 1.0) {
         evtSource.close();
+        clearInterval(heartbeatInterval);
+        heartbeatDot.className = "inline-block w-2 h-2 rounded-full bg-green-500";
+        heartbeatText.textContent = "Done";
         steps.forEach((el) => {
             const icon = el.querySelector(".step-icon");
             const name = el.querySelector(".step-name");
@@ -224,6 +260,9 @@ evtSource.onmessage = function(event) {
     // Error
     if (data.percent === -1) {
         evtSource.close();
+        clearInterval(heartbeatInterval);
+        heartbeatDot.className = "inline-block w-2 h-2 rounded-full bg-red-500";
+        heartbeatText.textContent = "Failed";
         actionBox.className = "bg-red-50 border border-red-200 rounded-lg p-4 mb-6";
         actionBox.innerHTML = '<div class="flex items-center gap-3">'
             + '<div class="h-5 w-5 text-red-600 font-bold text-lg">\u2717</div>'

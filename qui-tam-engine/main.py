@@ -99,6 +99,7 @@ async def loading_page(request: Request):
 async def progress_stream():
     """SSE endpoint for pipeline progress updates."""
     async def event_generator():
+        last_real_event = None
         while True:
             if _pipeline_queue is None:
                 await asyncio.sleep(1)
@@ -106,13 +107,22 @@ async def progress_stream():
                 continue
 
             try:
-                data = await asyncio.wait_for(_pipeline_queue.get(), timeout=2.0)
+                data = await asyncio.wait_for(_pipeline_queue.get(), timeout=3.0)
+                last_real_event = data
                 yield f"data: {json.dumps(data)}\n\n"
 
                 if data.get("percent") == 1.0 or data.get("percent") == -1:
                     break
             except asyncio.TimeoutError:
-                yield f"data: {json.dumps({'message': 'Working...', 'percent': None})}\n\n"
+                # Send a heartbeat with last known state so frontend knows we're alive
+                heartbeat = {
+                    "message": "Still working... (waiting for next step to complete)",
+                    "percent": last_real_event.get("percent") if last_real_event else None,
+                    "step": last_real_event.get("step", "Working...") if last_real_event else "Initializing...",
+                    "step_index": last_real_event.get("step_index", 0) if last_real_event else 0,
+                    "heartbeat": True,
+                }
+                yield f"data: {json.dumps(heartbeat)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
