@@ -1,0 +1,8 @@
+/* Additional styles beyond Tailwind */
+body {
+    -webkit-font-smoothing: antialiased;
+}
+
+tr:hover td {
+    background-color: #f9fafb;
+}

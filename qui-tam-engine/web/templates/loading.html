@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Analysis in Progress &mdash; Qui Tam Case Engine{% endblock %}
+
+{% block content %}
+<div id="loading-screen" class="max-w-2xl mx-auto mt-12 p-8">
+    <h2 class="text-2xl font-bold mb-6">Building Case Docket &mdash; Full Analysis in Progress</h2>
+
+    <div class="mb-4">
+        <div class="w-full bg-gray-200 rounded-full h-4">
+            <div id="progress-bar"
+                 class="bg-blue-600 h-4 rounded-full transition-all duration-500"
+                 style="width: 0%"></div>
+        </div>
+    </div>
+
+    <p id="progress-message" class="text-gray-700 mb-4">Initializing...</p>
+
+    <div id="progress-log"
+         class="bg-gray-50 rounded p-4 text-sm font-mono max-h-64 overflow-y-auto border">
+    </div>
+
+    <p class="text-xs text-gray-400 mt-4">
+        Initial analysis takes 5-15 minutes. The system is downloading and cross-referencing
+        data from CMS, OIG, and NPPES across thousands of hospice providers.
+    </p>
+</div>
+
+<script>
+const evtSource = new EventSource("/progress");
+const bar = document.getElementById("progress-bar");
+const msg = document.getElementById("progress-message");
+const log = document.getElementById("progress-log");
+
+evtSource.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+
+    if (data.percent !== null && data.percent >= 0) {
+        bar.style.width = (data.percent * 100) + "%";
+    }
+
+    msg.textContent = data.message;
+
+    const line = document.createElement("div");
+    line.textContent = new Date().toLocaleTimeString() + " -- " + data.message;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+
+    if (data.percent === 1.0) {
+        evtSource.close();
+        msg.textContent = "Analysis complete! Reloading...";
+        setTimeout(() => window.location.href = "/", 1500);
+    }
+
+    if (data.percent === -1) {
+        evtSource.close();
+        bar.classList.remove("bg-blue-600");
+        bar.classList.add("bg-red-600");
+        msg.textContent = "Error: " + data.message;
+    }
+};
+</script>
+{% endblock %}
