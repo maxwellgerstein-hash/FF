@@ -90,6 +90,39 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
             progress_queue.put_nowait(event)
         print(f"[{pct:.0%}] {msg}")
 
+    # Timeout wrapper — keeps pipeline moving when network is slow
+    INGEST_TIMEOUT = 45  # seconds per source (network downloads)
+
+    async def _timed_ingest(coro, label, timeout=INGEST_TIMEOUT):
+        """Run an ingestion coroutine with a timeout."""
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except asyncio.TimeoutError:
+            emit(f"WARNING: {label} timed out after {timeout}s — skipping", 0, None)
+            return None
+        except Exception as e:
+            emit(f"WARNING: {label} failed: {e}", 0, None)
+            return None
+
+    async def _run_blocking_ingest(ingester, db_session, label, timeout=INGEST_TIMEOUT):
+        """Run a blocking ingester (uses requests library) in a thread pool with timeout."""
+        import concurrent.futures
+        loop = asyncio.get_event_loop()
+
+        def _sync_ingest():
+            return asyncio.run(ingester.ingest(db_session))
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = loop.run_in_executor(pool, _sync_ingest)
+                return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            emit(f"WARNING: {label} timed out after {timeout}s — skipping", 0, None)
+            return None
+        except Exception as e:
+            emit(f"WARNING: {label} failed: {e}", 0, None)
+            return None
+
     init_db()
     db = SessionLocal()
 
@@ -110,45 +143,48 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         # ════════════════════════════════════════
 
         emit("Downloading CMS Hospice Compare data...", 0.05, "ingest_cms")
-        try:
-            hospice_stats = await CMSHospiceIngester().ingest(db)
+        hospice_stats = await _timed_ingest(
+            CMSHospiceIngester().ingest(db), "CMS Hospice Compare", timeout=60
+        )
+        if hospice_stats:
             emit(
                 f"Hospice Compare: {hospice_stats['records_pulled']} agencies, "
                 f"{hospice_stats['measures_pulled']} measure sets loaded",
-                0.10,
-                "ingest_cms",
+                0.10, "ingest_cms",
             )
-        except Exception as e:
-            emit(f"WARNING: CMS Hospice Compare failed: {e}", 0.10, "ingest_cms")
+        else:
             hospice_stats = {"records_pulled": 0, "measures_pulled": 0}
+            emit("CMS Hospice Compare: skipped (will use extended sources)", 0.10, "ingest_cms")
 
         emit("Downloading OIG LEIE exclusion list...", 0.12, "ingest_leie")
-        try:
-            leie_stats = await OIGLEIEIngester().ingest(db)
+        leie_stats = await _timed_ingest(
+            OIGLEIEIngester().ingest(db), "OIG LEIE", timeout=60
+        )
+        if leie_stats:
             emit(
                 f"OIG LEIE: {leie_stats['records_pulled']} exclusions indexed "
                 f"({leie_stats['records_with_npi']} with NPI)",
-                0.20,
-                "ingest_leie",
+                0.20, "ingest_leie",
             )
-        except Exception as e:
-            emit(f"WARNING: OIG LEIE failed: {e}", 0.20, "ingest_leie")
+        else:
             leie_stats = {"records_pulled": 0, "records_with_npi": 0}
+            emit("OIG LEIE: skipped", 0.20, "ingest_leie")
 
         emit("Downloading NPPES bulk file (~1 GB)...", 0.22, "ingest_nppes")
-        try:
-            nppes_stats = await NPPESIngester().ingest(
+        nppes_stats = await _timed_ingest(
+            NPPESIngester().ingest(
                 db, progress_callback=lambda msg, _: emit(msg, 0.35, "ingest_nppes")
-            )
+            ), "NPPES", timeout=120  # 2 min max for the 1GB download
+        )
+        if nppes_stats:
             emit(
                 f"NPPES: {nppes_stats['hospice_rows_found']} hospice providers extracted "
                 f"from {nppes_stats['total_rows_scanned']:,} total records",
-                0.40,
-                "ingest_nppes",
+                0.40, "ingest_nppes",
             )
-        except Exception as e:
-            emit(f"WARNING: NPPES failed: {e}. Continuing without NPPES enrichment.", 0.40, "ingest_nppes")
+        else:
             nppes_stats = {"hospice_rows_found": 0, "total_rows_scanned": 0}
+            emit("NPPES: skipped (continuing without NPPES enrichment)", 0.40, "ingest_nppes")
 
         # ════════════════════════════════════════
         # DATA INGESTION — EXTENDED SOURCES
@@ -157,57 +193,69 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         emit("Ingesting extended data sources...", 0.42, "ingest_extra")
         extra_stats = {}
 
-        # DOJ Settlements
+        # DOJ Settlements (has hardcoded fallback — should be fast)
+        emit("Loading DOJ settlement database...", 0.43, "ingest_extra")
         try:
             from ingestion.doj_settlements import DOJSettlementsIngester
-            doj_stats = await DOJSettlementsIngester().ingest(db)
-            extra_stats["doj"] = doj_stats
-            emit(f"DOJ Settlements: {doj_stats.get('records_pulled', 0)} cases loaded", 0.44, "ingest_extra")
+            doj_stats = await _run_blocking_ingest(DOJSettlementsIngester(), db, "DOJ Settlements", timeout=30)
+            if doj_stats:
+                extra_stats["doj"] = doj_stats
+                emit(f"DOJ Settlements: {doj_stats.get('records_pulled', 0)} cases loaded", 0.44, "ingest_extra")
         except Exception as e:
             emit(f"WARNING: DOJ Settlements failed: {e}", 0.44, "ingest_extra")
 
-        # Open Payments
+        # Open Payments (network — may timeout)
+        emit("Loading Open Payments data...", 0.45, "ingest_extra")
         try:
             from ingestion.open_payments import OpenPaymentsIngester
-            op_stats = await OpenPaymentsIngester().ingest(db)
-            extra_stats["open_payments"] = op_stats
-            emit(f"Open Payments: {op_stats.get('records_pulled', 0)} records loaded", 0.46, "ingest_extra")
+            op_stats = await _run_blocking_ingest(OpenPaymentsIngester(), db, "Open Payments", timeout=30)
+            if op_stats:
+                extra_stats["open_payments"] = op_stats
+                emit(f"Open Payments: {op_stats.get('records_pulled', 0)} records loaded", 0.46, "ingest_extra")
         except Exception as e:
             emit(f"WARNING: Open Payments failed: {e}", 0.46, "ingest_extra")
 
-        # Cost Reports
+        # Cost Reports (network — may timeout)
+        emit("Loading Medicare Cost Reports...", 0.46, "ingest_extra")
         try:
             from ingestion.cost_reports import CostReportsIngester
-            cr_stats = await CostReportsIngester().ingest(db)
-            extra_stats["cost_reports"] = cr_stats
-            emit(f"Cost Reports: {cr_stats.get('records_pulled', 0)} records loaded", 0.47, "ingest_extra")
+            cr_stats = await _run_blocking_ingest(CostReportsIngester(), db, "Cost Reports", timeout=30)
+            if cr_stats:
+                extra_stats["cost_reports"] = cr_stats
+                emit(f"Cost Reports: {cr_stats.get('records_pulled', 0)} records loaded", 0.47, "ingest_extra")
         except Exception as e:
             emit(f"WARNING: Cost Reports failed: {e}", 0.47, "ingest_extra")
 
-        # SAM.gov
+        # SAM.gov (network — may timeout)
+        emit("Loading SAM.gov exclusions...", 0.47, "ingest_extra")
         try:
             from ingestion.sam_gov import SAMGovIngester
-            sam_stats = await SAMGovIngester().ingest(db)
-            extra_stats["sam"] = sam_stats
-            emit(f"SAM.gov: {sam_stats.get('records_pulled', 0)} exclusions loaded", 0.48, "ingest_extra")
+            sam_stats = await _run_blocking_ingest(SAMGovIngester(), db, "SAM.gov", timeout=30)
+            if sam_stats:
+                extra_stats["sam"] = sam_stats
+                emit(f"SAM.gov: {sam_stats.get('records_pulled', 0)} exclusions loaded", 0.48, "ingest_extra")
         except Exception as e:
             emit(f"WARNING: SAM.gov failed: {e}", 0.48, "ingest_extra")
 
-        # SEC EDGAR
+        # SEC EDGAR (network — may timeout)
+        emit("Loading SEC EDGAR filings...", 0.48, "ingest_extra")
         try:
             from ingestion.sec_edgar import SECEdgarIngester
-            sec_stats = await SECEdgarIngester().ingest(db)
-            extra_stats["sec"] = sec_stats
-            emit(f"SEC EDGAR: {sec_stats.get('records_pulled', 0)} filings loaded", 0.49, "ingest_extra")
+            sec_stats = await _run_blocking_ingest(SECEdgarIngester(), db, "SEC EDGAR", timeout=30)
+            if sec_stats:
+                extra_stats["sec"] = sec_stats
+                emit(f"SEC EDGAR: {sec_stats.get('records_pulled', 0)} filings loaded", 0.49, "ingest_extra")
         except Exception as e:
             emit(f"WARNING: SEC EDGAR failed: {e}", 0.49, "ingest_extra")
 
-        # News
+        # News (hardcoded data — instant, no network)
+        emit("Loading news database...", 0.49, "ingest_extra")
         try:
             from ingestion.news_scraper import NewsIngester
-            news_stats = await NewsIngester().ingest(db)
-            extra_stats["news"] = news_stats
-            emit(f"News: {news_stats.get('records_pulled', 0)} articles loaded", 0.50, "ingest_extra")
+            news_stats = await _timed_ingest(NewsIngester().ingest(db), "News", timeout=10)
+            if news_stats:
+                extra_stats["news"] = news_stats
+                emit(f"News: {news_stats.get('records_pulled', 0)} articles loaded", 0.50, "ingest_extra")
         except Exception as e:
             emit(f"WARNING: News failed: {e}", 0.50, "ingest_extra")
 
