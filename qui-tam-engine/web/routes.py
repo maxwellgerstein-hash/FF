@@ -34,6 +34,12 @@ async def dashboard(request: Request):
         )
 
         leads_with_entities = []
+        total_govt_loss = 0
+        total_recovery_low = 0
+        total_recovery_high = 0
+        total_relator_low = 0
+        total_relator_high = 0
+
         for lead in case_leads:
             entity = db.query(Entity).filter(Entity.id == lead.entity_id).first()
             signal_count = (
@@ -54,12 +60,19 @@ async def dashboard(request: Request):
                 "cluster": cluster,
             })
 
+            total_govt_loss += lead.estimated_govt_loss or 0
+            total_recovery_low += lead.total_recovery_low or 0
+            total_recovery_high += lead.total_recovery_high or 0
+            total_relator_low += lead.relator_share_low or 0
+            total_relator_high += lead.relator_share_high or 0
+
         # Data freshness
         source_statuses = db.query(DataSourceStatus).all()
 
         # Summary stats
         total_entities = db.query(Entity).count()
         total_signals = db.query(SignalRecord).count()
+        total_sources = len(source_statuses)
 
         return templates.TemplateResponse(
             request=request,
@@ -70,6 +83,12 @@ async def dashboard(request: Request):
                 "total_entities": total_entities,
                 "total_signals": total_signals,
                 "total_leads": len(case_leads),
+                "total_sources": total_sources,
+                "total_govt_loss": total_govt_loss,
+                "total_recovery_low": total_recovery_low,
+                "total_recovery_high": total_recovery_high,
+                "total_relator_low": total_relator_low,
+                "total_relator_high": total_relator_high,
             },
         )
     finally:
@@ -113,6 +132,30 @@ async def case_detail(request: Request, case_id: int):
                     db.query(Entity).filter(Entity.id.in_(entity_ids)).all()
                 )
 
+        # Generate FOIA request
+        foia_text = ""
+        try:
+            from output.foia_generator import generate_foia_request
+            foia_text = generate_foia_request(entity, lead, signals)
+        except Exception as e:
+            foia_text = f"Error generating FOIA request: {e}"
+
+        # Generate complaint draft
+        complaint_text = ""
+        try:
+            from output.complaint_drafter import generate_complaint_draft
+            complaint_text = generate_complaint_draft(entity, lead, signals, cluster)
+        except Exception as e:
+            complaint_text = f"Error generating complaint draft: {e}"
+
+        # Generate case summary
+        case_summary = ""
+        try:
+            from output.complaint_drafter import generate_case_summary
+            case_summary = generate_case_summary(entity, lead, signals)
+        except Exception as e:
+            case_summary = f"Error generating case summary: {e}"
+
         return templates.TemplateResponse(
             request=request,
             name="case_detail.html",
@@ -122,6 +165,80 @@ async def case_detail(request: Request, case_id: int):
                 "signals": parsed_signals,
                 "cluster": cluster,
                 "cluster_entities": cluster_entities,
+                "foia_text": foia_text,
+                "complaint_text": complaint_text,
+                "case_summary": case_summary,
+            },
+        )
+    finally:
+        db.close()
+
+
+@router.get("/network", response_class=HTMLResponse)
+async def network_page(request: Request):
+    """Network map showing entity relationships."""
+    db = SessionLocal()
+    try:
+        network_data = {"nodes": [], "edges": [], "communities": [], "stats": {
+            "total_nodes": 0, "total_edges": 0, "communities_found": 0, "largest_community": 0
+        }}
+        referral_data = []
+
+        try:
+            from analysis.network_analysis import build_entity_network, find_referral_concentration
+            network_data = build_entity_network(db)
+            referral_data = find_referral_concentration(db)
+        except Exception as e:
+            print(f"Network analysis error: {e}")
+
+        return templates.TemplateResponse(
+            request=request,
+            name="network.html",
+            context={
+                "network_data": network_data,
+                "referral_data": referral_data,
+            },
+        )
+    finally:
+        db.close()
+
+
+@router.get("/geographic", response_class=HTMLResponse)
+async def geographic_page(request: Request):
+    """Geographic heat map of fraud hotspots."""
+    db = SessionLocal()
+    try:
+        geo_data = {"state_stats": {}, "hotspot_cities": [], "state_rankings": []}
+
+        try:
+            from analysis.geographic_analysis import generate_geographic_data
+            geo_data = generate_geographic_data(db)
+        except Exception as e:
+            print(f"Geographic analysis error: {e}")
+
+        return templates.TemplateResponse(
+            request=request,
+            name="geographic.html",
+            context={
+                "geo_data": geo_data,
+            },
+        )
+    finally:
+        db.close()
+
+
+@router.get("/sources", response_class=HTMLResponse)
+async def sources_page(request: Request):
+    """Data sources status page."""
+    db = SessionLocal()
+    try:
+        source_statuses = db.query(DataSourceStatus).all()
+
+        return templates.TemplateResponse(
+            request=request,
+            name="sources.html",
+            context={
+                "source_statuses": source_statuses,
             },
         )
     finally:

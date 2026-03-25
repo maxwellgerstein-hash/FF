@@ -108,3 +108,37 @@ EXPECTED_MEASURE_CODES = {
 
 # ── Hospice taxonomy codes for NPPES filtering ──
 HOSPICE_TAXONOMY_CODES = {"251G00000X"}
+
+# ── Advanced detection thresholds ──
+ADVANCED_THRESHOLDS = {
+    # GIP abuse (General Inpatient Care)
+    "gip_pct_flag": 10,       # National avg ~3-5%, flag above 10%
+    "gip_pct_critical": 20,   # Extreme outlier
+    # Cost report anomalies
+    "profit_margin_flag": 30,    # Industry avg ~8-12%
+    "profit_margin_critical": 50,
+    "revenue_per_day_flag": 300,  # National avg ~$195
+    # Open Payments kickback thresholds
+    "kickback_amount_medium": 10_000,
+    "kickback_amount_high": 50_000,
+    "kickback_amount_critical": 100_000,
+    # Geographic
+    "hospice_density_flag": 2.0,  # Ratio to state average
+    # Temporal
+    "rapid_growth_multiplier": 3.0,  # 3x market growth rate
+}
+
+# ── Known publicly traded hospice companies (for SEC cross-reference) ──
+PUBLIC_HOSPICE_COMPANIES = {
+    "AMEDISYS": {"ticker": "AMED", "cik": "0000014846"},
+    "ENHABIT HOME HEALTH & HOSPICE": {"ticker": "EHAB", "cik": "0001899287"},
+    "ADDUS HOMECARE": {"ticker": "ADUS", "cik": "0001313904"},
+    "BRIGHTSPRING HEALTH": {"ticker": "BTSG", "cik": "0001996862"},
+}
+
+# ── States with highest hospice fraud rates (DOJ data) ──
+HIGH_FRAUD_STATES = {
+    "TX": 0.05, "CA": 0.05, "FL": 0.05,
+    "AZ": 0.03, "NV": 0.03, "GA": 0.03,
+    "IL": 0.02, "MI": 0.02, "NY": 0.02, "OH": 0.02,
+}

@@ -2,9 +2,9 @@
 Full pipeline orchestrator with SSE progress events.
 
 Executes:
-  1. Data ingestion (CMS Hospice Compare, OIG LEIE, NPPES)
+  1. Data ingestion (CMS Hospice Compare, OIG LEIE, NPPES, DOJ, Open Payments, Cost Reports, SAM.gov, SEC, News)
   2. Entity resolution
-  3. Hospice fraud signal detection
+  3. Fraud signal detection (25+ signal types across 5 detection modules)
   4. Case scoring and lead generation
   5. Case clustering
 """
@@ -35,8 +35,9 @@ PIPELINE_STEPS = [
     {"id": "ingest_cms", "name": "Downloading CMS Hospice Compare data", "est_seconds": 30},
     {"id": "ingest_leie", "name": "Downloading OIG LEIE exclusion list", "est_seconds": 20},
     {"id": "ingest_nppes", "name": "Downloading & scanning NPPES bulk file (~1 GB)", "est_seconds": 300},
+    {"id": "ingest_extra", "name": "Ingesting DOJ, Open Payments, Cost Reports, SAM, SEC, News", "est_seconds": 30},
     {"id": "resolve", "name": "Resolving entities across data sources", "est_seconds": 30},
-    {"id": "detect", "name": "Running fraud signal detection", "est_seconds": 60},
+    {"id": "detect", "name": "Running fraud signal detection (25+ signal types)", "est_seconds": 60},
     {"id": "score", "name": "Scoring case leads & estimating recoveries", "est_seconds": 20},
     {"id": "cluster", "name": "Clustering related case leads", "est_seconds": 10},
 ]
@@ -105,7 +106,7 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         seed_known_fraud_cases()
 
         # ════════════════════════════════════════
-        # DATA INGESTION
+        # DATA INGESTION — CORE SOURCES
         # ════════════════════════════════════════
 
         emit("Downloading CMS Hospice Compare data...", 0.05, "ingest_cms")
@@ -142,18 +143,82 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
             emit(
                 f"NPPES: {nppes_stats['hospice_rows_found']} hospice providers extracted "
                 f"from {nppes_stats['total_rows_scanned']:,} total records",
-                0.45,
+                0.40,
                 "ingest_nppes",
             )
         except Exception as e:
-            emit(f"WARNING: NPPES failed: {e}. Continuing without NPPES enrichment.", 0.45, "ingest_nppes")
+            emit(f"WARNING: NPPES failed: {e}. Continuing without NPPES enrichment.", 0.40, "ingest_nppes")
             nppes_stats = {"hospice_rows_found": 0, "total_rows_scanned": 0}
+
+        # ════════════════════════════════════════
+        # DATA INGESTION — EXTENDED SOURCES
+        # ════════════════════════════════════════
+
+        emit("Ingesting extended data sources...", 0.42, "ingest_extra")
+        extra_stats = {}
+
+        # DOJ Settlements
+        try:
+            from ingestion.doj_settlements import DOJSettlementsIngester
+            doj_stats = await DOJSettlementsIngester().ingest(db)
+            extra_stats["doj"] = doj_stats
+            emit(f"DOJ Settlements: {doj_stats.get('records_pulled', 0)} cases loaded", 0.44, "ingest_extra")
+        except Exception as e:
+            emit(f"WARNING: DOJ Settlements failed: {e}", 0.44, "ingest_extra")
+
+        # Open Payments
+        try:
+            from ingestion.open_payments import OpenPaymentsIngester
+            op_stats = await OpenPaymentsIngester().ingest(db)
+            extra_stats["open_payments"] = op_stats
+            emit(f"Open Payments: {op_stats.get('records_pulled', 0)} records loaded", 0.46, "ingest_extra")
+        except Exception as e:
+            emit(f"WARNING: Open Payments failed: {e}", 0.46, "ingest_extra")
+
+        # Cost Reports
+        try:
+            from ingestion.cost_reports import CostReportsIngester
+            cr_stats = await CostReportsIngester().ingest(db)
+            extra_stats["cost_reports"] = cr_stats
+            emit(f"Cost Reports: {cr_stats.get('records_pulled', 0)} records loaded", 0.47, "ingest_extra")
+        except Exception as e:
+            emit(f"WARNING: Cost Reports failed: {e}", 0.47, "ingest_extra")
+
+        # SAM.gov
+        try:
+            from ingestion.sam_gov import SAMGovIngester
+            sam_stats = await SAMGovIngester().ingest(db)
+            extra_stats["sam"] = sam_stats
+            emit(f"SAM.gov: {sam_stats.get('records_pulled', 0)} exclusions loaded", 0.48, "ingest_extra")
+        except Exception as e:
+            emit(f"WARNING: SAM.gov failed: {e}", 0.48, "ingest_extra")
+
+        # SEC EDGAR
+        try:
+            from ingestion.sec_edgar import SECEdgarIngester
+            sec_stats = await SECEdgarIngester().ingest(db)
+            extra_stats["sec"] = sec_stats
+            emit(f"SEC EDGAR: {sec_stats.get('records_pulled', 0)} filings loaded", 0.49, "ingest_extra")
+        except Exception as e:
+            emit(f"WARNING: SEC EDGAR failed: {e}", 0.49, "ingest_extra")
+
+        # News
+        try:
+            from ingestion.news_scraper import NewsIngester
+            news_stats = await NewsIngester().ingest(db)
+            extra_stats["news"] = news_stats
+            emit(f"News: {news_stats.get('records_pulled', 0)} articles loaded", 0.50, "ingest_extra")
+        except Exception as e:
+            emit(f"WARNING: News failed: {e}", 0.50, "ingest_extra")
+
+        total_extra = sum(s.get("records_pulled", 0) for s in extra_stats.values())
+        emit(f"Extended sources: {total_extra} total records from {len(extra_stats)} sources", 0.50, "ingest_extra")
 
         # ════════════════════════════════════════
         # ENTITY RESOLUTION
         # ════════════════════════════════════════
 
-        emit("Resolving entities across data sources...", 0.50, "resolve")
+        emit("Resolving entities across data sources...", 0.52, "resolve")
         resolver = EntityResolver()
         resolution_stats = resolver.resolve_hospice_entities(db)
         emit(
@@ -171,19 +236,87 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         measures_by_ccn = _build_measures_lookup(db)
         emit(f"Measures available for {len(measures_by_ccn)} hospices", 0.65, "detect")
 
-        emit("Running fraud signal detection (11 signal types)...", 0.68, "detect")
+        emit("Running fraud signal detection (25+ signal types)...", 0.68, "detect")
 
         entities = db.query(Entity).all()
         total_signals = 0
         entities_with_signals = 0
 
+        # Load optional detection modules
+        advanced_detect = None
+        ownership_detect = None
+        geographic_detect = None
+        temporal_detect = None
+
+        try:
+            from detection.advanced_hospice import detect_advanced_hospice_signals
+            advanced_detect = detect_advanced_hospice_signals
+        except Exception as e:
+            print(f"Advanced hospice detection not available: {e}")
+
+        try:
+            from detection.ownership_fraud import detect_ownership_signals
+            ownership_detect = detect_ownership_signals
+        except Exception as e:
+            print(f"Ownership fraud detection not available: {e}")
+
+        try:
+            from detection.geographic_signals import detect_geographic_signals
+            geographic_detect = detect_geographic_signals
+        except Exception as e:
+            print(f"Geographic detection not available: {e}")
+
+        try:
+            from detection.temporal_signals import detect_temporal_signals
+            temporal_detect = detect_temporal_signals
+        except Exception as e:
+            print(f"Temporal detection not available: {e}")
+
         for i, entity in enumerate(entities):
             measures = measures_by_ccn.get(entity.ccn, {})
-            signals = detect_hospice_signals(entity, measures, db)
 
-            if signals:
+            # Run all detection modules
+            all_signals = []
+
+            # Core hospice fraud signals (HF01-HF11)
+            signals = detect_hospice_signals(entity, measures, db)
+            all_signals.extend(signals)
+
+            # Advanced hospice signals (HF12-HF18)
+            if advanced_detect:
+                try:
+                    adv_signals = advanced_detect(entity, measures, db)
+                    all_signals.extend(adv_signals)
+                except Exception:
+                    pass
+
+            # Ownership fraud signals (OF01-OF04)
+            if ownership_detect:
+                try:
+                    own_signals = ownership_detect(entity, measures, db)
+                    all_signals.extend(own_signals)
+                except Exception:
+                    pass
+
+            # Geographic signals (GEO01-GEO03)
+            if geographic_detect:
+                try:
+                    geo_signals = geographic_detect(entity, measures, db)
+                    all_signals.extend(geo_signals)
+                except Exception:
+                    pass
+
+            # Temporal signals (TP01-TP03)
+            if temporal_detect:
+                try:
+                    tmp_signals = temporal_detect(entity, measures, db)
+                    all_signals.extend(tmp_signals)
+                except Exception:
+                    pass
+
+            if all_signals:
                 entities_with_signals += 1
-                for signal in signals:
+                for signal in all_signals:
                     sig_record = SignalRecord(
                         entity_id=entity.id,
                         signal_code=signal.signal_code,
@@ -337,6 +470,7 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
             "hospice_agencies_analyzed": hospice_stats.get("records_pulled", 0),
             "exclusions_checked": leie_stats.get("records_pulled", 0),
             "nppes_hospice_providers": nppes_stats.get("hospice_rows_found", 0),
+            "extra_sources_loaded": total_extra,
             "entities_resolved": resolution_stats["entities_created"],
             "signals_detected": total_signals,
             "entities_flagged": entities_with_signals,

@@ -5,8 +5,8 @@
 <div id="loading-screen" class="max-w-3xl mx-auto mt-8 p-8">
     <h2 class="text-2xl font-bold mb-2">Building Case Docket</h2>
     <p class="text-gray-500 text-sm mb-6">
-        Cross-referencing CMS, OIG, and NPPES data across thousands of providers to identify
-        False Claims Act violations in healthcare, government contracts, and financial fraud.
+        Cross-referencing 9+ federal data sources across thousands of providers.
+        Running 25+ fraud detection algorithms to identify False Claims Act violations.
     </p>
 
     <!-- Progress Bar -->
@@ -64,36 +64,44 @@
                 <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">4</div>
                 <div class="flex-1">
                     <div class="step-name text-gray-600">Downloading &amp; scanning NPPES bulk file</div>
-                    <div class="text-xs text-gray-400">~8 million NPI records (~1 GB download), filtering hospice providers</div>
+                    <div class="text-xs text-gray-400">~8 million NPI records (~1 GB download)</div>
                 </div>
                 <div class="step-status text-xs text-gray-400">pending</div>
             </div>
             <div class="step flex items-center gap-3 text-sm" data-step="4">
                 <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">5</div>
                 <div class="flex-1">
-                    <div class="step-name text-gray-600">Resolving entities across data sources</div>
-                    <div class="text-xs text-gray-400">Fuzzy name matching, NPI/CCN cross-reference</div>
+                    <div class="step-name text-gray-600">Ingesting extended sources</div>
+                    <div class="text-xs text-gray-400">DOJ Settlements, Open Payments, Cost Reports, SAM.gov, SEC EDGAR, News</div>
                 </div>
                 <div class="step-status text-xs text-gray-400">pending</div>
             </div>
             <div class="step flex items-center gap-3 text-sm" data-step="5">
                 <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">6</div>
                 <div class="flex-1">
-                    <div class="step-name text-gray-600">Running fraud signal detection</div>
-                    <div class="text-xs text-gray-400">Ghost facilities, abnormal LOS, excluded officials, address clustering, and more</div>
+                    <div class="step-name text-gray-600">Resolving entities across data sources</div>
+                    <div class="text-xs text-gray-400">Fuzzy name matching, NPI/CCN cross-reference</div>
                 </div>
                 <div class="step-status text-xs text-gray-400">pending</div>
             </div>
             <div class="step flex items-center gap-3 text-sm" data-step="6">
                 <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">7</div>
                 <div class="flex-1">
-                    <div class="step-name text-gray-600">Scoring case leads &amp; estimating recoveries</div>
-                    <div class="text-xs text-gray-400">Litigation value, government loss, treble damages, relator share</div>
+                    <div class="step-name text-gray-600">Running fraud signal detection</div>
+                    <div class="text-xs text-gray-400">25+ signal types: ghost facilities, ALOS, excluded officials, kickbacks, GIP abuse, ownership fraud, geographic clustering</div>
                 </div>
                 <div class="step-status text-xs text-gray-400">pending</div>
             </div>
             <div class="step flex items-center gap-3 text-sm" data-step="7">
                 <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">8</div>
+                <div class="flex-1">
+                    <div class="step-name text-gray-600">Scoring case leads &amp; estimating recoveries</div>
+                    <div class="text-xs text-gray-400">Litigation value, government loss, treble damages, relator share</div>
+                </div>
+                <div class="step-status text-xs text-gray-400">pending</div>
+            </div>
+            <div class="step flex items-center gap-3 text-sm" data-step="8">
+                <div class="step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">9</div>
                 <div class="flex-1">
                     <div class="step-name text-gray-600">Clustering related case leads</div>
                     <div class="text-xs text-gray-400">Grouping shared-address and shared-owner entities into unified cases</div>
@@ -157,27 +165,23 @@ evtSource.onmessage = function(event) {
 
     // Update step indicators
     if (data.step_index !== undefined && data.step_index !== lastStepIndex) {
-        // Mark previous steps as complete
         steps.forEach((el, i) => {
             const icon = el.querySelector(".step-icon");
             const name = el.querySelector(".step-name");
             const status = el.querySelector(".step-status");
 
             if (i < data.step_index) {
-                // Completed
                 icon.className = "step-icon w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-xs font-bold text-white";
                 icon.innerHTML = "\u2713";
                 name.className = "step-name text-gray-500 line-through";
                 status.textContent = "done";
                 status.className = "step-status text-xs text-green-600 font-bold";
             } else if (i === data.step_index) {
-                // Active
                 icon.className = "step-icon w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white animate-pulse";
                 name.className = "step-name text-gray-900 font-bold";
                 status.textContent = "running...";
                 status.className = "step-status text-xs text-blue-600 font-bold";
             } else {
-                // Pending
                 icon.className = "step-icon w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500";
                 name.className = "step-name text-gray-600";
                 status.textContent = "pending";
@@ -196,8 +200,6 @@ evtSource.onmessage = function(event) {
     // Complete
     if (data.percent === 1.0) {
         evtSource.close();
-
-        // Mark all steps as complete
         steps.forEach((el) => {
             const icon = el.querySelector(".step-icon");
             const name = el.querySelector(".step-name");

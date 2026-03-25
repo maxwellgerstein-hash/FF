@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Geographic Heat Map &mdash; Qui Tam Case Engine{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Geographic Fraud Heat Map</h1>
+
+{% if not geo_data or not geo_data.state_stats %}
+<div class="bg-white rounded-lg shadow p-12 text-center">
+    <h2 class="text-xl font-bold mb-4">No Geographic Data Available</h2>
+    <p class="text-gray-600">Run the analysis pipeline first to generate geographic analysis.</p>
+</div>
+{% else %}
+
+<!-- National Overview -->
+<div class="grid grid-cols-3 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold">{{ geo_data.state_stats|length }}</div>
+        <div class="text-sm text-gray-500">States with Entities</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold text-red-600">{{ geo_data.hotspot_cities|length }}</div>
+        <div class="text-sm text-gray-500">Fraud Hotspot Cities</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold text-orange-600">
+            {{ geo_data.state_rankings[:5]|length }}
+        </div>
+        <div class="text-sm text-gray-500">Top Risk States</div>
+    </div>
+</div>
+
+<!-- State Risk Rankings -->
+<div class="grid grid-cols-2 gap-6 mb-6">
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-bold mb-4">State Risk Rankings</h2>
+        <table class="w-full text-sm">
+            <thead class="bg-gray-100">
+                <tr>
+                    <th class="px-3 py-2 text-left">#</th>
+                    <th class="px-3 py-2 text-left">State</th>
+                    <th class="px-3 py-2 text-center">Entities</th>
+                    <th class="px-3 py-2 text-center">Signals</th>
+                    <th class="px-3 py-2 text-right">Total Loss</th>
+                    <th class="px-3 py-2 text-right">Risk Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for state, score in geo_data.state_rankings[:20] %}
+                {% set stats = geo_data.state_stats[state] %}
+                <tr class="border-b">
+                    <td class="px-3 py-2 text-gray-500">{{ loop.index }}</td>
+                    <td class="px-3 py-2 font-bold">{{ state }}</td>
+                    <td class="px-3 py-2 text-center">{{ stats.entity_count }}</td>
+                    <td class="px-3 py-2 text-center">
+                        <span class="bg-red-100 text-red-800 px-2 py-0.5 rounded-full text-xs">{{ stats.signal_count }}</span>
+                    </td>
+                    <td class="px-3 py-2 text-right">{{ format_currency(stats.total_loss) }}</td>
+                    <td class="px-3 py-2 text-right">
+                        <div class="flex items-center justify-end gap-2">
+                            <div class="w-16 bg-gray-200 rounded-full h-2">
+                                <div class="bg-{% if score >= 70 %}red{% elif score >= 40 %}orange{% else %}yellow{% endif %}-500 h-2 rounded-full"
+                                     style="width: {{ [score, 100]|min }}%"></div>
+                            </div>
+                            <span class="font-bold text-xs">{{ "%.0f"|format(score) }}</span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Heat Map Visualization (US State Grid) -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-bold mb-4">State Heat Map</h2>
+        <div class="grid grid-cols-11 gap-1 text-xs text-center">
+            {% set state_grid = [
+                ['', '', '', '', '', '', '', '', '', '', 'ME'],
+                ['', 'WA', 'MT', 'ND', 'MN', 'WI', 'MI', '', 'NY', 'VT', 'NH'],
+                ['', 'OR', 'ID', 'SD', 'IA', 'IL', 'IN', 'OH', 'PA', 'MA', 'CT'],
+                ['', 'CA', 'NV', 'NE', 'MO', 'KY', 'WV', 'VA', 'NJ', 'RI', ''],
+                ['', '', 'UT', 'KS', 'AR', 'TN', 'NC', 'SC', 'MD', 'DE', ''],
+                ['', '', 'AZ', 'OK', 'LA', 'MS', 'AL', 'GA', 'DC', '', ''],
+                ['AK', '', 'NM', 'TX', '', '', '', 'FL', '', '', ''],
+                ['HI', '', 'CO', 'WY', '', '', '', '', '', '', '']
+            ] %}
+            {% for row in state_grid %}
+                {% for cell in row %}
+                    {% if cell == '' %}
+                        <div class="w-8 h-8"></div>
+                    {% else %}
+                        {% set s = geo_data.state_stats.get(cell, {}) %}
+                        {% set sc = s.get('signal_count', 0) %}
+                        <div class="w-8 h-8 rounded flex items-center justify-center font-bold cursor-pointer
+                            {% if sc >= 20 %}bg-red-500 text-white{% elif sc >= 10 %}bg-orange-400 text-white{% elif sc >= 5 %}bg-yellow-300{% elif sc >= 1 %}bg-yellow-100{% else %}bg-gray-100 text-gray-400{% endif %}"
+                            title="{{ cell }}: {{ s.get('entity_count', 0) }} entities, {{ sc }} signals">
+                            {{ cell }}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+        </div>
+        <div class="mt-4 flex gap-3 text-xs text-gray-500">
+            <span><span class="inline-block w-3 h-3 rounded bg-red-500 mr-1"></span> 20+ signals</span>
+            <span><span class="inline-block w-3 h-3 rounded bg-orange-400 mr-1"></span> 10-19 signals</span>
+            <span><span class="inline-block w-3 h-3 rounded bg-yellow-300 mr-1"></span> 5-9 signals</span>
+            <span><span class="inline-block w-3 h-3 rounded bg-yellow-100 mr-1"></span> 1-4 signals</span>
+        </div>
+    </div>
+</div>
+
+<!-- Hotspot Cities -->
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Fraud Hotspot Cities</h2>
+    <div class="grid grid-cols-4 gap-3">
+        {% for city in geo_data.hotspot_cities[:20] %}
+        <div class="bg-gray-50 rounded p-3 text-sm border-l-4
+            {% if city.signal_count >= 10 %}border-red-500{% elif city.signal_count >= 5 %}border-orange-400{% else %}border-yellow-300{% endif %}">
+            <div class="font-bold">{{ city.city }}, {{ city.state }}</div>
+            <div class="text-xs text-gray-500">
+                {{ city.entity_count }} entities | {{ city.signal_count }} signals
+            </div>
+            {% if city.total_loss > 0 %}
+            <div class="text-xs font-bold text-red-600">{{ format_currency(city.total_loss) }} est. loss</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}

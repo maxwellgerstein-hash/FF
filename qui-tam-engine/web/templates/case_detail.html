@@ -35,6 +35,18 @@
     </div>
 </div>
 
+<!-- Tabs -->
+<div class="flex gap-6 border-b mb-6 text-sm">
+    <button onclick="showTab('overview')" id="tab-overview" class="pb-2 tab-active">Overview</button>
+    <button onclick="showTab('signals')" id="tab-signals" class="pb-2 tab-inactive">Signals ({{ signals|length }})</button>
+    <button onclick="showTab('foia')" id="tab-foia" class="pb-2 tab-inactive">FOIA Request</button>
+    <button onclick="showTab('complaint')" id="tab-complaint" class="pb-2 tab-inactive">Complaint Draft</button>
+    <button onclick="showTab('nextsteps')" id="tab-nextsteps" class="pb-2 tab-inactive">Next Steps</button>
+</div>
+
+<!-- Tab: Overview -->
+<div id="panel-overview">
+
 <!-- Recovery Estimation -->
 <div class="bg-white rounded-lg shadow p-6 mb-6">
     <h2 class="text-lg font-bold mb-4">Recovery Estimation</h2>
@@ -115,7 +127,29 @@
     </div>
 </div>
 
-<!-- Signals Detected -->
+<!-- Cluster Info -->
+{% if cluster %}
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Case Cluster: {{ cluster.cluster_name }}</h2>
+    <div class="text-sm text-gray-600 mb-4">
+        Type: {{ cluster.cluster_type }} |
+        Combined Loss: {{ format_currency(cluster.combined_govt_loss) }}
+    </div>
+    <div class="grid grid-cols-3 gap-3">
+        {% for ce in cluster_entities %}
+        <div class="bg-gray-50 rounded p-3 text-sm {% if ce.id == entity.id %}border-2 border-blue-500{% endif %}">
+            <div class="font-bold">{{ ce.name }}</div>
+            <div class="text-xs text-gray-500">{{ ce.address }}, {{ ce.city }}, {{ ce.state }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+</div><!-- end panel-overview -->
+
+<!-- Tab: Signals -->
+<div id="panel-signals" class="hidden">
 <div class="bg-white rounded-lg shadow p-6 mb-6">
     <h2 class="text-lg font-bold mb-4">Signals Detected ({{ signals|length }})</h2>
     {% for item in signals %}
@@ -150,37 +184,137 @@
     </div>
     {% endfor %}
 </div>
+</div><!-- end panel-signals -->
 
-<!-- Cluster Info -->
-{% if cluster %}
+<!-- Tab: FOIA Request -->
+<div id="panel-foia" class="hidden">
 <div class="bg-white rounded-lg shadow p-6 mb-6">
-    <h2 class="text-lg font-bold mb-4">Case Cluster: {{ cluster.cluster_name }}</h2>
-    <div class="text-sm text-gray-600 mb-4">
-        Type: {{ cluster.cluster_type }} |
-        Combined Loss: {{ format_currency(cluster.combined_govt_loss) }}
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold">Auto-Generated FOIA Request</h2>
+        <button onclick="copyToClipboard('foia-text')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded">
+            Copy to Clipboard
+        </button>
     </div>
-    <div class="grid grid-cols-3 gap-3">
-        {% for ce in cluster_entities %}
-        <div class="bg-gray-50 rounded p-3 text-sm {% if ce.id == entity.id %}border-2 border-blue-500{% endif %}">
-            <div class="font-bold">{{ ce.name }}</div>
-            <div class="text-xs text-gray-500">{{ ce.address }}, {{ ce.city }}, {{ ce.state }}</div>
-        </div>
-        {% endfor %}
+    <div class="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm text-yellow-800 mb-4">
+        <strong>Note:</strong> This FOIA request is auto-generated. Review and customize before sending.
     </div>
+    <pre id="foia-text" class="bg-gray-50 rounded p-4 text-xs whitespace-pre-wrap font-mono border max-h-[600px] overflow-y-auto">{{ foia_text }}</pre>
 </div>
-{% endif %}
+</div><!-- end panel-foia -->
 
-<!-- Recommended Next Steps -->
+<!-- Tab: Complaint Draft -->
+<div id="panel-complaint" class="hidden">
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold">Draft Qui Tam Complaint Outline</h2>
+        <button onclick="copyToClipboard('complaint-text')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded">
+            Copy to Clipboard
+        </button>
+    </div>
+    <div class="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 mb-4">
+        <strong>DRAFT ONLY &mdash; FOR ATTORNEY REVIEW.</strong> This is an auto-generated complaint outline based on detected signals.
+        It is NOT legal advice and is NOT ready for filing. An attorney must review, verify, and supplement before any filing.
+    </div>
+    <pre id="complaint-text" class="bg-gray-50 rounded p-4 text-xs whitespace-pre-wrap font-mono border max-h-[600px] overflow-y-auto">{{ complaint_text }}</pre>
+</div>
+</div><!-- end panel-complaint -->
+
+<!-- Tab: Next Steps -->
+<div id="panel-nextsteps" class="hidden">
 <div class="bg-white rounded-lg shadow p-6 mb-6">
     <h2 class="text-lg font-bold mb-4">Recommended Next Steps</h2>
-    <ol class="list-decimal list-inside text-sm space-y-2 text-gray-700">
-        <li>Verify physical address via site visit or Google Street View</li>
-        <li>FOIA request for specific Medicare claims data for this provider</li>
-        <li>CourtListener/PACER search for existing qui tam filings (note: sealed cases invisible)</li>
-        <li>Check state licensing board for active license status</li>
-        <li>Review OIG Work Plan for current hospice fraud investigation priorities</li>
-        <li>Engage healthcare FCA specialist counsel for case evaluation</li>
-    </ol>
+
+    <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="bg-red-50 rounded p-4">
+            <h3 class="font-bold text-red-800 mb-2">Immediate Actions</h3>
+            <ol class="list-decimal list-inside text-sm space-y-2 text-red-700">
+                <li>Send the FOIA request (see FOIA tab) to CMS for detailed claims data</li>
+                <li>Verify physical address via Google Street View</li>
+                <li>Check state licensing board for active license status</li>
+                <li>Search CourtListener/PACER for existing qui tam filings</li>
+            </ol>
+        </div>
+        <div class="bg-blue-50 rounded p-4">
+            <h3 class="font-bold text-blue-800 mb-2">Investigation Actions</h3>
+            <ol class="list-decimal list-inside text-sm space-y-2 text-blue-700">
+                <li>Review Glassdoor/Indeed for employee complaints about pressure to admit</li>
+                <li>Check Google Reviews for patient family complaints</li>
+                <li>Research ownership chain via state Secretary of State filings</li>
+                <li>Identify potential whistleblower contacts (former employees)</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+        <div class="bg-green-50 rounded p-4">
+            <h3 class="font-bold text-green-800 mb-2">Legal Preparation</h3>
+            <ol class="list-decimal list-inside text-sm space-y-2 text-green-700">
+                <li>Review the auto-generated complaint draft (see Complaint tab)</li>
+                <li>Research comparable DOJ settlements for damages benchmarking</li>
+                <li>Assess public disclosure bar strategy (multi-source vs. single-source)</li>
+                <li>Engage healthcare FCA specialist counsel for case evaluation</li>
+            </ol>
+        </div>
+        <div class="bg-purple-50 rounded p-4">
+            <h3 class="font-bold text-purple-800 mb-2">Evidence Preservation</h3>
+            <ol class="list-decimal list-inside text-sm space-y-2 text-purple-700">
+                <li>Screenshot all public data sources used in analysis</li>
+                <li>Archive CMS Hospice Compare data for this provider</li>
+                <li>Document the analytical methodology used</li>
+                <li>Preserve any news articles mentioning this entity</li>
+            </ol>
+        </div>
+    </div>
+
+    {% if lead.sol_expiry %}
+    <div class="mt-6 p-4 bg-yellow-50 border border-yellow-300 rounded">
+        <div class="font-bold text-yellow-800">Statute of Limitations: {{ lead.sol_expiry }}</div>
+        <div class="text-sm text-yellow-700">Plan filing timeline accordingly. SOL is the hard deadline for initiating action.</div>
+    </div>
+    {% endif %}
 </div>
+
+<!-- Case Summary -->
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold">Executive Case Summary</h2>
+        <button onclick="copyToClipboard('summary-text')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded">
+            Copy to Clipboard
+        </button>
+    </div>
+    <pre id="summary-text" class="bg-gray-50 rounded p-4 text-xs whitespace-pre-wrap font-mono border">{{ case_summary }}</pre>
+</div>
+</div><!-- end panel-nextsteps -->
+
+<script>
+function showTab(tabName) {
+    // Hide all panels
+    document.querySelectorAll('[id^="panel-"]').forEach(el => el.classList.add('hidden'));
+    // Deactivate all tabs
+    document.querySelectorAll('[id^="tab-"]').forEach(el => {
+        el.classList.remove('tab-active');
+        el.classList.add('tab-inactive');
+    });
+    // Show selected panel
+    document.getElementById('panel-' + tabName).classList.remove('hidden');
+    // Activate selected tab
+    document.getElementById('tab-' + tabName).classList.remove('tab-inactive');
+    document.getElementById('tab-' + tabName).classList.add('tab-active');
+}
+
+function copyToClipboard(elementId) {
+    const text = document.getElementById(elementId).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target;
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.classList.replace('bg-blue-600', 'bg-green-600');
+        setTimeout(() => {
+            btn.textContent = orig;
+            btn.classList.replace('bg-green-600', 'bg-blue-600');
+        }, 2000);
+    });
+}
+</script>
 
 {% endblock %}
