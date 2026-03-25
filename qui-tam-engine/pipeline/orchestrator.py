@@ -179,17 +179,23 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
             leie_pct[0] = min(leie_pct[0] + 0.005, 0.19)
             emit(msg, leie_pct[0], "ingest_leie")
         leie_stats = await _timed_ingest(
-            OIGLEIEIngester().ingest(db, progress_callback=leie_progress), "OIG LEIE", timeout=60
+            OIGLEIEIngester().ingest(db, progress_callback=leie_progress), "OIG LEIE", timeout=15
         )
-        if leie_stats:
+        if leie_stats and leie_stats.get("records_pulled", 0) > 0:
             emit(
                 f"OIG LEIE: {leie_stats['records_pulled']} exclusions indexed "
                 f"({leie_stats['records_with_npi']} with NPI)",
                 0.20, "ingest_leie",
             )
         else:
-            leie_stats = {"records_pulled": 0, "records_with_npi": 0}
-            emit("OIG LEIE: skipped", 0.20, "ingest_leie")
+            # Fallback: use built-in exclusion database
+            emit("OIG download unavailable — loading built-in exclusion database...", 0.15, "ingest_leie")
+            from ingestion.seed_leie import seed_fallback_leie
+            leie_stats = seed_fallback_leie(db)
+            emit(
+                f"Loaded {leie_stats['records_pulled']} exclusion records from built-in database",
+                0.20, "ingest_leie",
+            )
 
         emit("Downloading NPPES bulk file (~1 GB)...", 0.22, "ingest_nppes")
         emit("This is the largest download — may take 1-2 minutes...", 0.23, "ingest_nppes")
