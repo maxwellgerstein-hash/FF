@@ -15,7 +15,7 @@ import os
 # Ensure the project root is on the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -81,22 +81,13 @@ async def start_analysis():
 
 
 @app.get("/loading", response_class=HTMLResponse)
-async def loading_page():
+async def loading_page(request: Request):
     """Show the loading/progress page."""
     from fastapi.templating import Jinja2Templates
-    from starlette.requests import Request
     templates = Jinja2Templates(directory="web/templates")
-    # Create a minimal request object
-    from starlette.datastructures import Headers
-    scope = {
-        "type": "http",
-        "method": "GET",
-        "path": "/loading",
-        "headers": [],
-        "query_string": b"",
-    }
-    request = Request(scope)
-    return templates.TemplateResponse("loading.html", {"request": request})
+    return templates.TemplateResponse(
+        request=request, name="loading.html", context={},
+    )
 
 
 @app.get("/progress")

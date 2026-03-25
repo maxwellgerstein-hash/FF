@@ -59,14 +59,17 @@ async def dashboard(request: Request):
         total_entities = db.query(Entity).count()
         total_signals = db.query(SignalRecord).count()
 
-        return templates.TemplateResponse("dashboard.html", {
-            "request": request,
-            "leads": leads_with_entities,
-            "source_statuses": source_statuses,
-            "total_entities": total_entities,
-            "total_signals": total_signals,
-            "total_leads": len(case_leads),
-        })
+        return templates.TemplateResponse(
+            request=request,
+            name="dashboard.html",
+            context={
+                "leads": leads_with_entities,
+                "source_statuses": source_statuses,
+                "total_entities": total_entities,
+                "total_signals": total_signals,
+                "total_leads": len(case_leads),
+            },
+        )
     finally:
         db.close()
 
@@ -108,13 +111,16 @@ async def case_detail(request: Request, case_id: int):
                     db.query(Entity).filter(Entity.id.in_(entity_ids)).all()
                 )
 
-        return templates.TemplateResponse("case_detail.html", {
-            "request": request,
-            "lead": lead,
-            "entity": entity,
-            "signals": parsed_signals,
-            "cluster": cluster,
-            "cluster_entities": cluster_entities,
-        })
+        return templates.TemplateResponse(
+            request=request,
+            name="case_detail.html",
+            context={
+                "lead": lead,
+                "entity": entity,
+                "signals": parsed_signals,
+                "cluster": cluster,
+                "cluster_entities": cluster_entities,
+            },
+        )
     finally:
         db.close()
