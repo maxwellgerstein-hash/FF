@@ -146,15 +146,22 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         hospice_stats = await _timed_ingest(
             CMSHospiceIngester().ingest(db), "CMS Hospice Compare", timeout=60
         )
-        if hospice_stats:
+        if hospice_stats and hospice_stats.get("records_pulled", 0) > 0:
             emit(
                 f"Hospice Compare: {hospice_stats['records_pulled']} agencies, "
                 f"{hospice_stats['measures_pulled']} measure sets loaded",
                 0.10, "ingest_cms",
             )
         else:
-            hospice_stats = {"records_pulled": 0, "measures_pulled": 0}
-            emit("CMS Hospice Compare: skipped (will use extended sources)", 0.10, "ingest_cms")
+            # Fallback: use built-in seed data
+            emit("CMS download unavailable — loading built-in provider database...", 0.07, "ingest_cms")
+            from ingestion.seed_entities import seed_fallback_entities
+            hospice_stats = seed_fallback_entities(db)
+            emit(
+                f"Loaded {hospice_stats['records_pulled']} providers + "
+                f"{hospice_stats['measures_pulled']} measure sets from built-in database",
+                0.10, "ingest_cms",
+            )
 
         emit("Downloading OIG LEIE exclusion list...", 0.12, "ingest_leie")
         leie_stats = await _timed_ingest(
@@ -251,7 +258,7 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         # News (hardcoded data — instant, no network)
         emit("Loading news database...", 0.49, "ingest_extra")
         try:
-            from ingestion.news_scraper import NewsIngester
+            from ingestion.news_scraper import NewsScraperIngester as NewsIngester
             news_stats = await _timed_ingest(NewsIngester().ingest(db), "News", timeout=10)
             if news_stats:
                 extra_stats["news"] = news_stats

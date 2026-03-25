@@ -104,8 +104,26 @@ class EntityResolver:
             if existing:
                 continue
 
-            episodes = safe_int(data.get("# of Total Episodes"))
-            patients = safe_int(data.get("# of Total Patients"))
+            episodes = safe_int(
+                data.get("# of Total Episodes")
+                or data.get("Total Number Of Episodes (unduplicated)")
+                or data.get("total_episodes")
+            )
+            patients = safe_int(
+                data.get("# of Total Patients")
+                or data.get("Total Number Of Patients (unduplicated)")
+                or data.get("total_patients")
+            )
+
+            # Get authorized official from CMS data (if available)
+            auth_first = (
+                data.get("Authorized Official First Name", "")
+                or data.get("auth_first", "")
+            ).strip()
+            auth_last = (
+                data.get("Authorized Official Last Name", "")
+                or data.get("auth_last", "")
+            ).strip()
 
             entity = Entity(
                 name=name,
@@ -120,6 +138,8 @@ class EntityResolver:
                 certification_date=data.get("Certification Date", ""),
                 total_episodes=episodes,
                 total_patients=patients,
+                authorized_official_first_name=auth_first or None,
+                authorized_official_last_name=auth_last or None,
                 # Estimate: episodes x median_LOS x daily_rate (conservative)
                 estimated_annual_medicare_payments=float(episodes) * 18 * 195.0,
                 created_at=datetime.now().isoformat(),
