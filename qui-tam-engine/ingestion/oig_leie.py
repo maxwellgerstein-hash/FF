@@ -102,22 +102,48 @@ class OIGLEIEIngester(BaseIngester):
         }
 
         if progress_callback:
-            progress_callback("Downloading OIG LEIE exclusion list...", None)
+            progress_callback("Connecting to OIG servers...", None)
 
+        # Stream download so we can report progress
+        chunks = []
         async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
-            resp = await client.get(DOWNLOAD_URL)
-            resp.raise_for_status()
+            async with client.stream("GET", DOWNLOAD_URL) as response:
+                response.raise_for_status()
+                total = int(response.headers.get("content-length", 0))
+                downloaded = 0
+                async for chunk in response.aiter_bytes(chunk_size=65536):
+                    chunks.append(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback and total > 0 and downloaded % (512 * 1024) < 65536:
+                        pct = downloaded / total * 100
+                        progress_callback(
+                            f"Downloading LEIE CSV... {downloaded // 1024:,} KB / {total // 1024:,} KB ({pct:.0f}%)",
+                            None,
+                        )
+
+        csv_text = b"".join(chunks).decode("utf-8", errors="replace")
+
+        if progress_callback:
+            progress_callback("Parsing exclusion records...", None)
 
         df = pd.read_csv(
-            io.StringIO(resp.text), dtype=str, keep_default_na=False
+            io.StringIO(csv_text), dtype=str, keep_default_na=False
         )
 
         stats["records_pulled"] = len(df)
 
+        if progress_callback:
+            progress_callback(f"Indexing {len(df):,} exclusion records...", None)
+
         # Clear existing LEIE index
         db_session.query(LEIEIndex).delete()
 
-        for _, row in df.iterrows():
+        for idx, (_, row) in enumerate(df.iterrows()):
+            if progress_callback and idx > 0 and idx % 10000 == 0:
+                progress_callback(
+                    f"Indexed {idx:,} / {len(df):,} LEIE records...",
+                    None,
+                )
             lastname = row.get("LASTNAME", "").strip()
             firstname = row.get("FIRSTNAME", "").strip()
             busname = row.get("BUSNAME", "").strip()

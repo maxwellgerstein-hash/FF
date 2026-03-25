@@ -54,9 +54,17 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
     pipeline_start = time.monotonic()
     current_step_index = 0
 
-    def emit(msg: str, pct: float, step_id: str | None = None):
+    last_pct = [0.0]  # Track last known percent for None pass-through
+
+    def emit(msg: str, pct: float | None, step_id: str | None = None):
         nonlocal current_step_index
         elapsed = time.monotonic() - pipeline_start
+
+        # Use last known percent if caller passes None
+        if pct is None:
+            pct = last_pct[0]
+        else:
+            last_pct[0] = pct
 
         # Update step index
         if step_id:
@@ -143,8 +151,10 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
         # ════════════════════════════════════════
 
         emit("Downloading CMS Hospice Compare data...", 0.05, "ingest_cms")
+        def cms_progress(msg, _):
+            emit(msg, None, "ingest_cms")
         hospice_stats = await _timed_ingest(
-            CMSHospiceIngester().ingest(db), "CMS Hospice Compare", timeout=60
+            CMSHospiceIngester().ingest(db, progress_callback=cms_progress), "CMS Hospice Compare", timeout=60
         )
         if hospice_stats and hospice_stats.get("records_pulled", 0) > 0:
             emit(
@@ -164,12 +174,14 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
             )
 
         emit("Downloading OIG LEIE exclusion list...", 0.12, "ingest_leie")
-        emit("Connecting to OIG servers & downloading exclusion CSV...", 0.13, "ingest_leie")
+        leie_pct = [0.12]
+        def leie_progress(msg, _):
+            leie_pct[0] = min(leie_pct[0] + 0.005, 0.19)
+            emit(msg, leie_pct[0], "ingest_leie")
         leie_stats = await _timed_ingest(
-            OIGLEIEIngester().ingest(db), "OIG LEIE", timeout=60
+            OIGLEIEIngester().ingest(db, progress_callback=leie_progress), "OIG LEIE", timeout=60
         )
         if leie_stats:
-            emit("Parsing exclusion records...", 0.17, "ingest_leie")
             emit(
                 f"OIG LEIE: {leie_stats['records_pulled']} exclusions indexed "
                 f"({leie_stats['records_with_npi']} with NPI)",
