@@ -15,6 +15,8 @@ import os
 # Ensure the project root is on the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,10 +26,12 @@ from db.database import init_db
 from web.routes import router
 from pipeline.orchestrator import run_pipeline
 
+BASE_DIR = Path(__file__).resolve().parent
+
 app = FastAPI(title="Qui Tam Case Engine", version="0.1.0")
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="web/static"), name="static")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "web" / "static")), name="static")
 
 # Include routes
 app.include_router(router)
@@ -80,12 +84,13 @@ async def start_analysis():
     )
 
 
+_templates = Jinja2Templates(directory=str(BASE_DIR / "web" / "templates"))
+
+
 @app.get("/loading", response_class=HTMLResponse)
 async def loading_page(request: Request):
     """Show the loading/progress page."""
-    from fastapi.templating import Jinja2Templates
-    templates = Jinja2Templates(directory="web/templates")
-    return templates.TemplateResponse(
+    return _templates.TemplateResponse(
         request=request, name="loading.html", context={},
     )
 

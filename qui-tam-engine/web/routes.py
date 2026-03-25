@@ -3,6 +3,8 @@ FastAPI routes for the Qui Tam Case Engine dashboard.
 """
 
 import json
+from pathlib import Path
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -14,7 +16,7 @@ from db.models import (
 from output.case_docket import format_case_docket_entry, format_currency
 
 router = APIRouter()
-templates = Jinja2Templates(directory="web/templates")
+templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 
 # Make format_currency available in templates
 templates.env.globals["format_currency"] = format_currency

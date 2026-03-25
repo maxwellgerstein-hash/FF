@@ -325,26 +325,24 @@ class CMSHospiceIngester(BaseIngester):
     def _update_source_status(self, db_session, stats: dict):
         """Update data_source_status table."""
         for source_name in ["cms_hospice_general", "cms_hospice_measures"]:
+            count = (
+                stats["records_pulled"] if "general" in source_name
+                else stats["measures_pulled"]
+            )
             existing = db_session.query(DataSourceStatus).filter(
                 DataSourceStatus.source_name == source_name
             ).first()
 
             if existing:
                 existing.last_successful_pull = datetime.now().isoformat()
-                existing.records_pulled = (
-                    stats["records_pulled"] if "general" in source_name
-                    else stats["measures_pulled"]
-                )
-                existing.pull_status = "SUCCESS" if stats["records_pulled"] > 0 else "FAILED"
+                existing.records_pulled = count
+                existing.pull_status = "SUCCESS" if count > 0 else "FAILED"
             else:
                 status = DataSourceStatus(
                     source_name=source_name,
                     last_successful_pull=datetime.now().isoformat(),
-                    records_pulled=(
-                        stats["records_pulled"] if "general" in source_name
-                        else stats["measures_pulled"]
-                    ),
-                    pull_status="SUCCESS" if stats["records_pulled"] > 0 else "FAILED",
+                    records_pulled=count,
+                    pull_status="SUCCESS" if count > 0 else "FAILED",
                 )
                 db_session.add(status)
 

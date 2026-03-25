@@ -46,6 +46,14 @@ async def run_pipeline(progress_queue: asyncio.Queue | None = None):
     db = SessionLocal()
 
     try:
+        # Clear stale data from any previous run so results don't accumulate
+        emit("Clearing previous analysis data...", 0.02)
+        db.query(CaseLeadRecord).delete()
+        db.query(SignalRecord).delete()
+        db.query(Entity).delete()
+        db.query(SourceRecord).delete()
+        db.commit()
+
         # Seed known fraud cases for validation
         seed_known_fraud_cases()
 
