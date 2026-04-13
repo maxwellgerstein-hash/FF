@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}Case #{{ lead.id }} &mdash; {{ entity.name if entity else 'Unknown' }}{% endblock %}
+
+{% block content %}
+
+<a href="/" class="text-blue-600 hover:underline text-sm mb-4 inline-block">&larr; Back to Case Docket</a>
+
+<!-- Entity Header -->
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <div class="flex justify-between items-start">
+        <div>
+            <h1 class="text-2xl font-bold">{{ entity.name if entity else 'Unknown Entity' }}</h1>
+            <div class="text-sm text-gray-500 mt-1">
+                {% if entity %}
+                    {{ entity.address }}, {{ entity.city }}, {{ entity.state }}
+                    {% if entity.npi %} | NPI: {{ entity.npi }}{% endif %}
+                    {% if entity.ccn %} | CCN: {{ entity.ccn }}{% endif %}
+                    {% if entity.telephone %} | Tel: {{ entity.telephone }}{% endif %}
+                {% endif %}
+            </div>
+            {% if entity and entity.authorized_official_last_name %}
+            <div class="text-sm text-gray-500">
+                Authorized Official: {{ entity.authorized_official_first_name }}
+                {{ entity.authorized_official_last_name }}
+            </div>
+            {% endif %}
+        </div>
+        <div class="text-right">
+            <div class="text-4xl font-bold {% if lead.case_score >= 70 %}text-red-600{% elif lead.case_score >= 50 %}text-orange-500{% else %}text-yellow-500{% endif %}">
+                {{ "%.1f"|format(lead.case_score) }}
+            </div>
+            <div class="text-sm text-gray-500">Case Score</div>
+            <div class="text-xs text-gray-400">Confidence: {{ "%.0f"|format(lead.confidence * 100) }}%</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div class="flex gap-6 border-b mb-6 text-sm">
+    <button onclick="showTab('overview')" id="tab-overview" class="pb-2 tab-active">Overview</button>
+    <button onclick="showTab('signals')" id="tab-signals" class="pb-2 tab-inactive">Signals ({{ signals|length }})</button>
+    <button onclick="showTab('foia')" id="tab-foia" class="pb-2 tab-inactive">FOIA Request</button>
+    <button onclick="showTab('complaint')" id="tab-complaint" class="pb-2 tab-inactive">Complaint Draft</button>
+    <button onclick="showTab('nextsteps')" id="tab-nextsteps" class="pb-2 tab-inactive">Next Steps</button>
+</div>
+
+<!-- Tab: Overview -->
+<div id="panel-overview">
+
+<!-- Recovery Estimation -->
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Recovery Estimation</h2>
+    <div class="grid grid-cols-2 gap-6">
+        <div>
+            <table class="w-full text-sm">
+                <tr class="border-b">
+                    <td class="py-2 text-gray-600">Estimated Government Loss</td>
+                    <td class="py-2 text-right font-bold text-lg">{{ format_currency(lead.estimated_govt_loss) }}</td>
+                </tr>
+                <tr class="border-b">
+                    <td class="py-2 text-gray-600">Estimated False Claims</td>
+                    <td class="py-2 text-right">{{ "{:,}".format(lead.estimated_claim_count or 0) }} claims</td>
+                </tr>
+                <tr class="border-b">
+                    <td class="py-2 text-gray-600">Double Damages (cooperating)</td>
+                    <td class="py-2 text-right">{{ format_currency(lead.double_damages) }}</td>
+                </tr>
+                <tr class="border-b">
+                    <td class="py-2 text-gray-600">Treble Damages</td>
+                    <td class="py-2 text-right">{{ format_currency(lead.treble_damages) }}</td>
+                </tr>
+                <tr class="border-b">
+                    <td class="py-2 text-gray-600">Per-Claim Penalties</td>
+                    <td class="py-2 text-right">{{ format_currency(lead.penalties_low) }} &ndash; {{ format_currency(lead.penalties_high) }}</td>
+                </tr>
+            </table>
+        </div>
+        <div class="bg-gray-50 rounded-lg p-4">
+            <div class="text-center">
+                <div class="text-sm text-gray-500 mb-2">Total Recovery Range</div>
+                <div class="text-2xl font-bold text-green-700">
+                    {{ format_currency(lead.total_recovery_low) }} &ndash; {{ format_currency(lead.total_recovery_high) }}
+                </div>
+                <div class="text-sm text-gray-500 mt-4 mb-2">Relator Share (15-30%)</div>
+                <div class="text-xl font-bold text-blue-700">
+                    {{ format_currency(lead.relator_share_low) }} &ndash; {{ format_currency(lead.relator_share_high) }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Legal Risk Assessment -->
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Legal Risk Assessment</h2>
+    <div class="grid grid-cols-2 gap-4 text-sm">
+        <div class="p-3 bg-gray-50 rounded">
+            <div class="text-gray-500">Public Disclosure Bar Risk</div>
+            <div class="font-bold risk-{{ lead.public_disclosure_risk }}">{{ lead.public_disclosure_risk }}</div>
+        </div>
+        <div class="p-3 bg-gray-50 rounded">
+            <div class="text-gray-500">First-to-File Risk</div>
+            <div class="font-bold">{{ lead.first_to_file_risk }}</div>
+            <div class="text-xs text-gray-400">Sealed cases are invisible in public records</div>
+        </div>
+        <div class="p-3 bg-gray-50 rounded">
+            <div class="text-gray-500">Rule 9(b) Sufficiency</div>
+            <div class="font-bold risk-{% if lead.rule_9b_sufficiency == 'STRONG' %}LOW{% elif lead.rule_9b_sufficiency == 'MODERATE' %}MEDIUM{% else %}HIGH{% endif %}">
+                {{ lead.rule_9b_sufficiency }}
+            </div>
+        </div>
+        <div class="p-3 bg-gray-50 rounded">
+            <div class="text-gray-500">DOJ Intervention Likelihood</div>
+            <div class="font-bold risk-{% if lead.doj_intervention_likelihood == 'HIGH' %}LOW{% elif lead.doj_intervention_likelihood == 'MEDIUM' %}MEDIUM{% else %}HIGH{% endif %}">
+                {{ lead.doj_intervention_likelihood }}
+            </div>
+        </div>
+        {% if lead.sol_expiry %}
+        <div class="p-3 bg-gray-50 rounded col-span-2">
+            <div class="text-gray-500">Statute of Limitations Expiry</div>
+            <div class="font-bold">{{ lead.sol_expiry }}</div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+        <strong>Legal Theory:</strong> {{ lead.legal_theory }}
+    </div>
+</div>
+
+<!-- Cluster Info -->
+{% if cluster %}
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Case Cluster: {{ cluster.cluster_name }}</h2>
+    <div class="text-sm text-gray-600 mb-4">
+        Type: {{ cluster.cluster_type }} |
+        Combined Loss: {{ format_currency(cluster.combined_govt_loss) }}
+    </div>
+    <div class="grid grid-cols-3 gap-3">
+        {% for ce in cluster_entities %}
+        <div class="bg-gray-50 rounded p-3 text-sm {% if ce.id == entity.id %}border-2 border-blue-500{% endif %}">
+            <div class="font-bold">{{ ce.name }}</div>
+            <div class="text-xs text-gray-500">{{ ce.address }}, {{ ce.city }}, {{ ce.state }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+</div><!-- end panel-overview -->
+
+<!-- Tab: Signals -->
+<div id="panel-signals" class="hidden">
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Signals Detected ({{ signals|length }})</h2>
+    {% for item in signals %}
+    <div class="type-{{ item.record.signal_type }} rounded p-4 mb-3">
+        <div class="flex justify-between items-start">
+            <div>
+                <span class="font-mono font-bold text-sm">{{ item.record.signal_code }}</span>
+                <span class="severity-{{ item.record.severity }} text-xs ml-2">{{ item.record.severity }}</span>
+                <span class="text-xs text-gray-500 ml-2">
+                    [{{ item.record.signal_type }}] Weight: {{ item.record.weight }}
+                </span>
+            </div>
+            <div class="text-xs text-gray-500">{{ item.record.data_source }}</div>
+        </div>
+        <div class="mt-2 text-sm">{{ item.record.description }}</div>
+        {% if item.record.fca_provision %}
+        <div class="mt-1 text-xs text-gray-500">FCA: {{ item.record.fca_provision }}</div>
+        {% endif %}
+        {% if item.evidence %}
+        <div class="mt-2 bg-white bg-opacity-50 rounded p-2 text-xs font-mono">
+            {% for key, value in item.evidence.items() %}
+            <div><span class="text-gray-500">{{ key }}:</span> {{ value }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if item.record.violation_date_start %}
+        <div class="mt-1 text-xs text-gray-400">
+            Violation period: {{ item.record.violation_date_start }}
+            {% if item.record.violation_date_end %} to {{ item.record.violation_date_end }}{% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+</div><!-- end panel-signals -->
+
+<!-- Tab: FOIA Request -->
+<div id="panel-foia" class="hidden">
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold">Auto-Generated FOIA Request</h2>
+        <button onclick="copyToClipboard('foia-text')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded">
+            Copy to Clipboard
+        </button>
+    </div>
+    <div class="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm text-yellow-800 mb-4">
+        <strong>Note:</strong> This FOIA request is auto-generated. Review and customize before sending.
+    </div>
+    <pre id="foia-text" class="bg-gray-50 rounded p-4 text-xs whitespace-pre-wrap font-mono border max-h-[600px] overflow-y-auto">{{ foia_text }}</pre>
+</div>
+</div><!-- end panel-foia -->
+
+<!-- Tab: Complaint Draft -->
+<div id="panel-complaint" class="hidden">
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold">Draft Qui Tam Complaint Outline</h2>
+        <button onclick="copyToClipboard('complaint-text')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded">
+            Copy to Clipboard
+        </button>
+    </div>
+    <div class="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 mb-4">
+        <strong>DRAFT ONLY &mdash; FOR ATTORNEY REVIEW.</strong> This is an auto-generated complaint outline based on detected signals.
+        It is NOT legal advice and is NOT ready for filing. An attorney must review, verify, and supplement before any filing.
+    </div>
+    <pre id="complaint-text" class="bg-gray-50 rounded p-4 text-xs whitespace-pre-wrap font-mono border max-h-[600px] overflow-y-auto">{{ complaint_text }}</pre>
+</div>
+</div><!-- end panel-complaint -->
+
+<!-- Tab: Next Steps -->
+<div id="panel-nextsteps" class="hidden">
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Recommended Next Steps</h2>
+
+    <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="bg-red-50 rounded p-4">
+            <h3 class="font-bold text-red-800 mb-2">Immediate Actions</h3>
+            <ol class="list-decimal list-inside text-sm space-y-2 text-red-700">
+                <li>Send the FOIA request (see FOIA tab) to CMS for detailed claims data</li>
+                <li>Verify physical address via Google Street View</li>
+                <li>Check state licensing board for active license status</li>
+                <li>Search CourtListener/PACER for existing qui tam filings</li>
+            </ol>
+        </div>
+        <div class="bg-blue-50 rounded p-4">
+            <h3 class="font-bold text-blue-800 mb-2">Investigation Actions</h3>
+            <ol class="list-decimal list-inside text-sm space-y-2 text-blue-700">
+                <li>Review Glassdoor/Indeed for employee complaints about pressure to admit</li>
+                <li>Check Google Reviews for patient family complaints</li>
+                <li>Research ownership chain via state Secretary of State filings</li>
+                <li>Identify potential whistleblower contacts (former employees)</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+        <div class="bg-green-50 rounded p-4">
+            <h3 class="font-bold text-green-800 mb-2">Legal Preparation</h3>
+            <ol class="list-decimal list-inside text-sm space-y-2 text-green-700">
+                <li>Review the auto-generated complaint draft (see Complaint tab)</li>
+                <li>Research comparable DOJ settlements for damages benchmarking</li>
+                <li>Assess public disclosure bar strategy (multi-source vs. single-source)</li>
+                <li>Engage healthcare FCA specialist counsel for case evaluation</li>
+            </ol>
+        </div>
+        <div class="bg-purple-50 rounded p-4">
+            <h3 class="font-bold text-purple-800 mb-2">Evidence Preservation</h3>
+            <ol class="list-decimal list-inside text-sm space-y-2 text-purple-700">
+                <li>Screenshot all public data sources used in analysis</li>
+                <li>Archive CMS Hospice Compare data for this provider</li>
+                <li>Document the analytical methodology used</li>
+                <li>Preserve any news articles mentioning this entity</li>
+            </ol>
+        </div>
+    </div>
+
+    {% if lead.sol_expiry %}
+    <div class="mt-6 p-4 bg-yellow-50 border border-yellow-300 rounded">
+        <div class="font-bold text-yellow-800">Statute of Limitations: {{ lead.sol_expiry }}</div>
+        <div class="text-sm text-yellow-700">Plan filing timeline accordingly. SOL is the hard deadline for initiating action.</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Case Summary -->
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold">Executive Case Summary</h2>
+        <button onclick="copyToClipboard('summary-text')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded">
+            Copy to Clipboard
+        </button>
+    </div>
+    <pre id="summary-text" class="bg-gray-50 rounded p-4 text-xs whitespace-pre-wrap font-mono border">{{ case_summary }}</pre>
+</div>
+</div><!-- end panel-nextsteps -->
+
+<script>
+function showTab(tabName) {
+    // Hide all panels
+    document.querySelectorAll('[id^="panel-"]').forEach(el => el.classList.add('hidden'));
+    // Deactivate all tabs
+    document.querySelectorAll('[id^="tab-"]').forEach(el => {
+        el.classList.remove('tab-active');
+        el.classList.add('tab-inactive');
+    });
+    // Show selected panel
+    document.getElementById('panel-' + tabName).classList.remove('hidden');
+    // Activate selected tab
+    document.getElementById('tab-' + tabName).classList.remove('tab-inactive');
+    document.getElementById('tab-' + tabName).classList.add('tab-active');
+}
+
+function copyToClipboard(elementId) {
+    const text = document.getElementById(elementId).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target;
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.classList.replace('bg-blue-600', 'bg-green-600');
+        setTimeout(() => {
+            btn.textContent = orig;
+            btn.classList.replace('bg-green-600', 'bg-blue-600');
+        }, 2000);
+    });
+}
+</script>
+
+{% endblock %}

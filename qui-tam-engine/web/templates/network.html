@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Network Map &mdash; Qui Tam Case Engine{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Entity Network Map</h1>
+
+{% if not network_data or not network_data.nodes %}
+<div class="bg-white rounded-lg shadow p-12 text-center">
+    <h2 class="text-xl font-bold mb-4">No Network Data Available</h2>
+    <p class="text-gray-600">Run the analysis pipeline first to generate entity relationships.</p>
+</div>
+{% else %}
+
+<!-- Network Stats -->
+<div class="grid grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold">{{ network_data.stats.total_nodes }}</div>
+        <div class="text-sm text-gray-500">Entities in Network</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold">{{ network_data.stats.total_edges }}</div>
+        <div class="text-sm text-gray-500">Relationships</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold text-purple-600">{{ network_data.stats.communities_found }}</div>
+        <div class="text-sm text-gray-500">Communities</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold text-red-600">{{ network_data.stats.largest_community }}</div>
+        <div class="text-sm text-gray-500">Largest Community</div>
+    </div>
+</div>
+
+<!-- Referral Concentration -->
+{% if referral_data %}
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Officials Controlling Multiple Entities</h2>
+    <table class="w-full text-sm">
+        <thead class="bg-gray-100">
+            <tr>
+                <th class="px-4 py-2 text-left">Authorized Official</th>
+                <th class="px-4 py-2 text-center">Entities Controlled</th>
+                <th class="px-4 py-2 text-left">Entity Names</th>
+                <th class="px-4 py-2 text-left">States</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in referral_data %}
+            <tr class="border-b">
+                <td class="px-4 py-2 font-bold">{{ item.official }}</td>
+                <td class="px-4 py-2 text-center">
+                    <span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-bold">{{ item.entity_count }}</span>
+                </td>
+                <td class="px-4 py-2 text-xs">{{ item.entity_names|join(', ') }}</td>
+                <td class="px-4 py-2 text-xs">{{ item.states|join(', ') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Network Visualization -->
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Network Graph</h2>
+    <div id="network-graph" class="border rounded" style="height: 500px; position: relative; overflow: hidden;">
+        <canvas id="graph-canvas" style="width: 100%; height: 100%;"></canvas>
+    </div>
+    <div class="mt-3 flex gap-4 text-xs text-gray-500">
+        <span><span class="inline-block w-3 h-3 rounded-full bg-red-500 mr-1"></span> High-score entity</span>
+        <span><span class="inline-block w-3 h-3 rounded-full bg-orange-400 mr-1"></span> Medium-score entity</span>
+        <span><span class="inline-block w-3 h-3 rounded-full bg-gray-400 mr-1"></span> Low-score entity</span>
+        <span><span class="inline-block w-3 h-1 bg-blue-500 mr-1"></span> Shared address</span>
+        <span><span class="inline-block w-3 h-1 bg-purple-500 mr-1"></span> Shared official</span>
+    </div>
+</div>
+
+<!-- Communities List -->
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Entity Communities</h2>
+    {% for community in network_data.communities %}
+    {% if community|length >= 2 %}
+    <div class="mb-4 p-4 bg-gray-50 rounded">
+        <div class="font-bold text-sm mb-2">Community ({{ community|length }} entities)</div>
+        <div class="grid grid-cols-3 gap-2">
+            {% for node_id in community %}
+            {% for node in network_data.nodes if node.id == node_id %}
+            <div class="bg-white rounded p-2 text-xs border">
+                <div class="font-bold">{{ node.name }}</div>
+                <div class="text-gray-500">{{ node.state }} | Score: {{ node.score|default('N/A') }}</div>
+            </div>
+            {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+
+<script>
+// Simple force-directed graph visualization
+(function() {
+    const canvas = document.getElementById('graph-canvas');
+    const ctx = canvas.getContext('2d');
+    const container = canvas.parentElement;
+
+    canvas.width = container.clientWidth;
+    canvas.height = 500;
+
+    const nodes = {{ network_data.nodes | tojson }};
+    const edges = {{ network_data.edges | tojson }};
+
+    if (nodes.length === 0) return;
+
+    // Initialize positions randomly
+    nodes.forEach(n => {
+        n.x = Math.random() * canvas.width;
+        n.y = Math.random() * canvas.height;
+        n.vx = 0;
+        n.vy = 0;
+    });
+
+    const nodeMap = {};
+    nodes.forEach(n => nodeMap[n.id] = n);
+
+    // Simple force simulation
+    function simulate() {
+        // Repulsion
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                const dx = nodes[j].x - nodes[i].x;
+                const dy = nodes[j].y - nodes[i].y;
+                const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+                const force = 5000 / (dist * dist);
+                nodes[i].vx -= (dx / dist) * force;
+                nodes[i].vy -= (dy / dist) * force;
+                nodes[j].vx += (dx / dist) * force;
+                nodes[j].vy += (dy / dist) * force;
+            }
+        }
+
+        // Attraction along edges
+        edges.forEach(e => {
+            const a = nodeMap[e.source];
+            const b = nodeMap[e.target];
+            if (!a || !b) return;
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+            const force = (dist - 100) * 0.01;
+            a.vx += (dx / dist) * force;
+            a.vy += (dy / dist) * force;
+            b.vx -= (dx / dist) * force;
+            b.vy -= (dy / dist) * force;
+        });
+
+        // Center gravity
+        nodes.forEach(n => {
+            n.vx += (canvas.width / 2 - n.x) * 0.001;
+            n.vy += (canvas.height / 2 - n.y) * 0.001;
+        });
+
+        // Update positions
+        nodes.forEach(n => {
+            n.vx *= 0.9;
+            n.vy *= 0.9;
+            n.x += n.vx;
+            n.y += n.vy;
+            n.x = Math.max(20, Math.min(canvas.width - 20, n.x));
+            n.y = Math.max(20, Math.min(canvas.height - 20, n.y));
+        });
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw edges
+        edges.forEach(e => {
+            const a = nodeMap[e.source];
+            const b = nodeMap[e.target];
+            if (!a || !b) return;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = e.relationship_type === 'shared_address' ? '#3b82f6' : '#a855f7';
+            ctx.lineWidth = (e.strength || 0.5) * 2;
+            ctx.stroke();
+        });
+
+        // Draw nodes
+        nodes.forEach(n => {
+            const score = n.score || 0;
+            const radius = Math.max(6, Math.min(16, score / 5));
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = score >= 70 ? '#ef4444' : score >= 50 ? '#f97316' : '#9ca3af';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Label
+            ctx.fillStyle = '#374151';
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'center';
+            const label = (n.name || '').substring(0, 20);
+            ctx.fillText(label, n.x, n.y + radius + 12);
+        });
+    }
+
+    let frame = 0;
+    function animate() {
+        simulate();
+        draw();
+        frame++;
+        if (frame < 200) requestAnimationFrame(animate);
+    }
+    animate();
+})();
+</script>
+
+{% endif %}
+{% endblock %}

@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Case Docket &mdash; Qui Tam Case Engine{% endblock %}
+
+{% block content %}
+
+<!-- Data Freshness Banner -->
+{% if source_statuses %}
+<div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-sm">
+    <span class="font-bold text-blue-800">Data Freshness:</span>
+    {% for status in source_statuses %}
+        <span class="{% if status.pull_status == 'SUCCESS' %}text-blue-700{% else %}text-red-600{% endif %}">
+            {{ status.source_name }}
+            ({% if status.pull_status == 'SUCCESS' %}{{ status.last_successful_pull[:10] if status.last_successful_pull else 'unknown' }}{% else %}FAILED{% endif %}){% if not loop.last %} | {% endif %}
+        </span>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Summary Stats -->
+<div class="grid grid-cols-5 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold">{{ total_entities }}</div>
+        <div class="text-sm text-gray-500">Entities Analyzed</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold">{{ total_signals }}</div>
+        <div class="text-sm text-gray-500">Signals Detected</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold text-red-600">{{ total_leads }}</div>
+        <div class="text-sm text-gray-500">Case Leads (&gt;$500K)</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <div class="text-3xl font-bold text-green-600">{{ total_sources }}</div>
+        <div class="text-sm text-gray-500">Data Sources</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 text-center">
+        <form method="POST" action="/analyze">
+            <button type="submit"
+                    class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition">
+                Run Full Analysis
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Total Recovery Summary -->
+{% if leads %}
+<div class="bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-lg shadow p-6 mb-6">
+    <div class="grid grid-cols-3 gap-6">
+        <div>
+            <div class="text-sm text-gray-400 mb-1">Total Estimated Government Loss</div>
+            <div class="text-3xl font-bold text-red-400">{{ format_currency(total_govt_loss) }}</div>
+        </div>
+        <div>
+            <div class="text-sm text-gray-400 mb-1">Total Potential Recovery Range</div>
+            <div class="text-2xl font-bold text-green-400">
+                {{ format_currency(total_recovery_low) }} &ndash; {{ format_currency(total_recovery_high) }}
+            </div>
+        </div>
+        <div>
+            <div class="text-sm text-gray-400 mb-1">Potential Relator Share (15-30%)</div>
+            <div class="text-2xl font-bold text-blue-400">
+                {{ format_currency(total_relator_low) }} &ndash; {{ format_currency(total_relator_high) }}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if not leads %}
+<!-- Empty State -->
+<div class="bg-white rounded-lg shadow p-12 text-center">
+    <h2 class="text-2xl font-bold mb-4">No Case Leads Yet</h2>
+    <p class="text-gray-600 mb-6">
+        Click "Run Full Analysis" to cross-reference 9+ federal data sources
+        across thousands of providers to detect False Claims Act violations.
+    </p>
+    <div class="grid grid-cols-3 gap-4 text-left text-sm max-w-3xl mx-auto mb-6">
+        <div class="bg-gray-50 rounded p-3">
+            <div class="font-bold text-gray-700 mb-1">Healthcare Fraud</div>
+            <div class="text-xs text-gray-500">Hospice, home health, billing, DME, telehealth, behavioral health, kickbacks</div>
+        </div>
+        <div class="bg-gray-50 rounded p-3">
+            <div class="font-bold text-gray-700 mb-1">9+ Data Sources</div>
+            <div class="text-xs text-gray-500">CMS Hospice Compare, OIG LEIE, NPPES, DOJ Settlements, Open Payments, Cost Reports, SAM.gov, SEC EDGAR, News</div>
+        </div>
+        <div class="bg-gray-50 rounded p-3">
+            <div class="font-bold text-gray-700 mb-1">25+ Signal Types</div>
+            <div class="text-xs text-gray-500">Ghost facilities, ALOS anomalies, excluded officials, kickbacks, GIP abuse, ownership fraud, geographic clustering</div>
+        </div>
+    </div>
+    <div class="grid grid-cols-4 gap-3 text-left text-xs max-w-3xl mx-auto mb-6">
+        <div class="bg-red-50 rounded p-2">
+            <div class="font-bold text-red-700">Auto-Generated</div>
+            <div class="text-red-600">FOIA Requests</div>
+        </div>
+        <div class="bg-blue-50 rounded p-2">
+            <div class="font-bold text-blue-700">Auto-Generated</div>
+            <div class="text-blue-600">Complaint Drafts</div>
+        </div>
+        <div class="bg-green-50 rounded p-2">
+            <div class="font-bold text-green-700">Network Analysis</div>
+            <div class="text-green-600">Entity Relationships</div>
+        </div>
+        <div class="bg-purple-50 rounded p-2">
+            <div class="font-bold text-purple-700">Geographic</div>
+            <div class="text-purple-600">Fraud Heat Maps</div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- Case Docket Table -->
+<div class="bg-white rounded-lg shadow overflow-hidden">
+    <table class="w-full text-sm">
+        <thead class="bg-gray-800 text-white">
+            <tr>
+                <th class="px-4 py-3 text-left">#</th>
+                <th class="px-4 py-3 text-left">Score</th>
+                <th class="px-4 py-3 text-left">Entity</th>
+                <th class="px-4 py-3 text-left">Location</th>
+                <th class="px-4 py-3 text-right">Est. Govt Loss</th>
+                <th class="px-4 py-3 text-right">Est. Recovery</th>
+                <th class="px-4 py-3 text-center">Signals</th>
+                <th class="px-4 py-3 text-center">Rule 9(b)</th>
+                <th class="px-4 py-3 text-center">DOJ</th>
+                <th class="px-4 py-3 text-left">Cluster</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in leads %}
+            <tr class="border-b hover:bg-gray-50 cursor-pointer"
+                onclick="window.location='/case/{{ item.lead.id }}'">
+                <td class="px-4 py-3 text-gray-500">{{ loop.index }}</td>
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <div class="w-16 bg-gray-200 rounded-full h-2">
+                            <div class="bg-{% if item.lead.case_score >= 70 %}red{% elif item.lead.case_score >= 50 %}orange{% else %}yellow{% endif %}-500 h-2 rounded-full score-bar"
+                                 style="width: {{ item.lead.case_score }}%"></div>
+                        </div>
+                        <span class="font-bold">{{ "%.1f"|format(item.lead.case_score) }}</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3">
+                    <div class="font-bold">{{ item.entity.name if item.entity else 'Unknown' }}</div>
+                    <div class="text-xs text-gray-500">
+                        {% if item.entity and item.entity.npi %}NPI: {{ item.entity.npi }}{% endif %}
+                        {% if item.entity and item.entity.ccn %}CCN: {{ item.entity.ccn }}{% endif %}
+                    </div>
+                </td>
+                <td class="px-4 py-3 text-xs">
+                    {% if item.entity %}{{ item.entity.city }}, {{ item.entity.state }}{% endif %}
+                </td>
+                <td class="px-4 py-3 text-right font-bold">
+                    {{ format_currency(item.lead.estimated_govt_loss) }}
+                </td>
+                <td class="px-4 py-3 text-right text-xs">
+                    {{ format_currency(item.lead.total_recovery_low) }} &ndash;
+                    {{ format_currency(item.lead.total_recovery_high) }}
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-bold">
+                        {{ item.signal_count }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <span class="risk-{{ item.lead.rule_9b_sufficiency }}">
+                        {{ item.lead.rule_9b_sufficiency }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <span class="risk-{{ item.lead.doj_intervention_likelihood }}">
+                        {{ item.lead.doj_intervention_likelihood }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-xs">
+                    {% if item.cluster %}
+                        <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">
+                            {{ item.cluster.cluster_name[:30] }}
+                        </span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% endblock %}

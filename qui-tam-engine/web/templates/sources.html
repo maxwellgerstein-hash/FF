@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Data Sources &mdash; Qui Tam Case Engine{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Data Sources</h1>
+
+<!-- Source Status Table -->
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="text-lg font-bold mb-4">Ingestion Status</h2>
+    {% if source_statuses %}
+    <table class="w-full text-sm">
+        <thead class="bg-gray-100">
+            <tr>
+                <th class="px-4 py-2 text-left">Source</th>
+                <th class="px-4 py-2 text-center">Status</th>
+                <th class="px-4 py-2 text-right">Records</th>
+                <th class="px-4 py-2 text-left">Last Pull</th>
+                <th class="px-4 py-2 text-left">Error</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for status in source_statuses %}
+            <tr class="border-b">
+                <td class="px-4 py-2 font-bold">{{ status.source_name }}</td>
+                <td class="px-4 py-2 text-center">
+                    <span class="px-2 py-1 rounded text-xs font-bold
+                        {% if status.pull_status == 'SUCCESS' %}bg-green-100 text-green-800
+                        {% elif status.pull_status == 'PARTIAL' %}bg-yellow-100 text-yellow-800
+                        {% else %}bg-red-100 text-red-800{% endif %}">
+                        {{ status.pull_status }}
+                    </span>
+                </td>
+                <td class="px-4 py-2 text-right">{{ "{:,}".format(status.records_pulled or 0) }}</td>
+                <td class="px-4 py-2 text-xs">{{ status.last_successful_pull[:19] if status.last_successful_pull else 'Never' }}</td>
+                <td class="px-4 py-2 text-xs text-red-600">{{ status.error_message[:80] if status.error_message else '' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-gray-500">No data has been ingested yet. Run the analysis pipeline.</p>
+    {% endif %}
+</div>
+
+<!-- Source Descriptions -->
+<div class="grid grid-cols-3 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold mb-2 text-blue-800">CMS Hospice Compare</h3>
+        <div class="text-xs text-gray-600 mb-2">~5,000 hospice agencies with quality measures</div>
+        <div class="text-xs text-gray-500">General info, ALOS, live discharge rates, cancer diagnosis rates, certification dates</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold mb-2 text-blue-800">OIG LEIE</h3>
+        <div class="text-xs text-gray-600 mb-2">~82,000 excluded individuals &amp; entities</div>
+        <div class="text-xs text-gray-500">Exclusion list cross-referenced against authorized officials and facility names</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold mb-2 text-blue-800">NPPES</h3>
+        <div class="text-xs text-gray-600 mb-2">~8 million NPI records (1 GB)</div>
+        <div class="text-xs text-gray-500">Provider registry filtered for hospice taxonomy, enriches entities with NPI and official names</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold mb-2 text-red-800">DOJ Settlements</h3>
+        <div class="text-xs text-gray-600 mb-2">30+ major hospice fraud cases</div>
+        <div class="text-xs text-gray-500">Historical DOJ settlements for validation and cross-referencing current entities</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold mb-2 text-red-800">Open Payments</h3>
+        <div class="text-xs text-gray-600 mb-2">Physician-industry financial relationships</div>
+        <div class="text-xs text-gray-500">Identifies kickback patterns: payments from pharma/device companies to hospice officials</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold mb-2 text-red-800">Medicare Cost Reports</h3>
+        <div class="text-xs text-gray-600 mb-2">Hospice financial data</div>
+        <div class="text-xs text-gray-500">Revenue, costs, profit margins, revenue per patient day for anomaly detection</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold mb-2 text-green-800">SAM.gov</h3>
+        <div class="text-xs text-gray-600 mb-2">Federal exclusion records</div>
+        <div class="text-xs text-gray-500">Debarment, suspension, and exclusion records beyond LEIE</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold mb-2 text-green-800">SEC EDGAR</h3>
+        <div class="text-xs text-gray-600 mb-2">Public company filings</div>
+        <div class="text-xs text-gray-500">Risk factors, government investigation disclosures for publicly traded hospice companies</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold mb-2 text-green-800">News &amp; Media</h3>
+        <div class="text-xs text-gray-600 mb-2">50+ major fraud stories</div>
+        <div class="text-xs text-gray-500">CBS 60 Minutes, ProPublica, NYT, local news coverage of hospice fraud investigations</div>
+    </div>
+</div>
+
+{% endblock %}
